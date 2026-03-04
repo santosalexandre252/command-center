@@ -1,8 +1,7 @@
 {
-  "/_not-found/page": "app/_not-found/page.js",
-  "/page": "app/page.js",
   "/dashboard/page": "app/dashboard/page.js",
-  "/api/intervals/route": "app/api/intervals/route.js",
-  "/settings/page": "app/settings/page.js",
-  "/planner/page": "app/planner/page.js"
+  "/planner/page": "app/planner/page.js",
+  "/fuelling/page": "app/fuelling/page.js",
+  "/load/page": "app/load/page.js",
+  "/api/intervals/route": "app/api/intervals/route.js"
 }
