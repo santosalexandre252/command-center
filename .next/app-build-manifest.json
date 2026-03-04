@@ -16,15 +16,25 @@
       "static/chunks/main-app.js",
       "static/chunks/app/dashboard/page.js"
     ],
-    "/fuelling/page": [
+    "/load/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/fuelling/page.js"
+      "static/chunks/app/load/page.js"
+    ],
+    "/races/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/races/page.js"
     ],
     "/planner/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/planner/page.js"
+    ],
+    "/race/[id]/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/race/[id]/page.js"
     ]
   }
 }
