@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { getAthleteProfile, updateAthleteProfile } from "../../lib/db";
+import { getIntervalsProfile } from "../../lib/intervals";
 
 function ConnectionCard({ name, icon, status, description }) {
   const isConnected = status === "connected";
@@ -28,18 +29,18 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [dbStatus, setDbStatus] = useState("checking");
+  const [intervalsStatus, setIntervalsStatus] = useState("checking");
+  const [intervalsFitness, setIntervalsFitness] = useState(null);
 
   useEffect(() => {
     async function load() {
       const data = await getAthleteProfile();
-      if (data) {
-        setAthlete(data);
-        setWeight(data.weight);
-        setBodyFat(data.body_fat);
-        setDbStatus("connected");
-      } else {
-        setDbStatus("error");
-      }
+      if (data) { setAthlete(data); setWeight(data.weight); setBodyFat(data.body_fat); setDbStatus("connected"); }
+      else setDbStatus("error");
+
+      const ival = await getIntervalsProfile();
+      if (ival && ival.ctl !== undefined) { setIntervalsStatus("connected"); setIntervalsFitness(ival); }
+      else setIntervalsStatus("error");
     }
     load();
   }, []);
@@ -60,8 +61,8 @@ export default function SettingsPage() {
       <div className="mb-8">
         <h2 className="text-sm font-medium text-gray-400 mb-3">Data Connections</h2>
         <div className="space-y-2">
-          <ConnectionCard name="Supabase" icon="🗄️" status={dbStatus === "connected" ? "connected" : "pending"} description={dbStatus === "connected" ? "Database connected — profile + races loaded" : "Checking connection..."} />
-          <ConnectionCard name="Intervals.icu" icon="📊" status="pending" description="Training load, PMC chart, workout sync" />
+          <ConnectionCard name="Supabase" icon="🗄️" status={dbStatus === "connected" ? "connected" : "pending"} description={dbStatus === "connected" ? "Database connected — profile + races loaded" : "Checking..."} />
+          <ConnectionCard name="Intervals.icu" icon="📊" status={intervalsStatus === "connected" ? "connected" : "pending"} description={intervalsStatus === "connected" ? `Connected — CTL ${Math.round(intervalsFitness?.ctl)}, ATL ${Math.round(intervalsFitness?.atl)}` : "Checking API key..."} />
           <ConnectionCard name="Strava" icon="🟧" status="pending" description="Activity data, GPS routes, social" />
           <ConnectionCard name="Apple Watch" icon="⌚" status="pending" description="HR, HRV, sleep, via Intervals.icu" />
           <ConnectionCard name="Smart Scale" icon="⚖️" status="pending" description="Weight, body fat, via Intervals.icu" />
@@ -70,42 +71,46 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {/* Intervals.icu live stats */}
+      {intervalsFitness && (
+        <div className="mb-8">
+          <h2 className="text-sm font-medium text-gray-400 mb-3">Intervals.icu Live Data <span className="text-emerald-400 text-[10px] ml-1">● live</span></h2>
+          <div className="grid grid-cols-4 gap-3">
+            <div className="bg-surface-850 border border-white/5 rounded-xl p-4">
+              <div className="text-[10px] text-gray-500">CTL (Fitness)</div>
+              <div className="text-xl font-bold text-blue-400">{Math.round(intervalsFitness.ctl)}</div>
+            </div>
+            <div className="bg-surface-850 border border-white/5 rounded-xl p-4">
+              <div className="text-[10px] text-gray-500">ATL (Fatigue)</div>
+              <div className="text-xl font-bold text-pink-400">{Math.round(intervalsFitness.atl)}</div>
+            </div>
+            <div className="bg-surface-850 border border-white/5 rounded-xl p-4">
+              <div className="text-[10px] text-gray-500">TSB (Form)</div>
+              <div className={`text-xl font-bold ${intervalsFitness.tsb >= 0 ? "text-emerald-400" : "text-amber-400"}`}>{Math.round(intervalsFitness.tsb)}</div>
+            </div>
+            <div className="bg-surface-850 border border-white/5 rounded-xl p-4">
+              <div className="text-[10px] text-gray-500">FTP</div>
+              <div className="text-xl font-bold text-white">{intervalsFitness.ftp || "—"}W</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mb-8">
-        <h2 className="text-sm font-medium text-gray-400 mb-3">Athlete Profile {dbStatus === "connected" && <span className="text-emerald-400 text-[10px] ml-2">● Live from Supabase</span>}</h2>
+        <h2 className="text-sm font-medium text-gray-400 mb-3">Athlete Profile {dbStatus === "connected" && <span className="text-emerald-400 text-[10px] ml-2">● Supabase</span>}</h2>
         <div className="bg-surface-850 border border-white/5 rounded-xl p-5 space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs text-gray-500 block mb-1">Name</label>
-              <div className="text-sm text-gray-200 bg-surface-900 rounded-lg px-3 py-2">{athlete?.name || "Loading..."}</div>
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 block mb-1">Age</label>
-              <div className="text-sm text-gray-200 bg-surface-900 rounded-lg px-3 py-2">{athlete?.age || "..."}</div>
-            </div>
+            <div><label className="text-xs text-gray-500 block mb-1">Name</label><div className="text-sm text-gray-200 bg-surface-900 rounded-lg px-3 py-2">{athlete?.name || "Loading..."}</div></div>
+            <div><label className="text-xs text-gray-500 block mb-1">Age</label><div className="text-sm text-gray-200 bg-surface-900 rounded-lg px-3 py-2">{athlete?.age || "..."}</div></div>
           </div>
           <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="text-xs text-gray-500 block mb-1">FTP</label>
-              <div className="text-sm text-gray-200 bg-surface-900 rounded-lg px-3 py-2">{athlete?.ftp || "..."}W</div>
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 block mb-1">Threshold Pace</label>
-              <div className="text-sm text-gray-200 bg-surface-900 rounded-lg px-3 py-2">{athlete?.threshold_pace_min || "..."}–{athlete?.threshold_pace_max || "..."}/km</div>
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 block mb-1">Max HR</label>
-              <div className="text-sm text-gray-200 bg-surface-900 rounded-lg px-3 py-2">{athlete?.max_hr || "..."} bpm</div>
-            </div>
+            <div><label className="text-xs text-gray-500 block mb-1">FTP</label><div className="text-sm text-gray-200 bg-surface-900 rounded-lg px-3 py-2">{athlete?.ftp || "..."}W</div></div>
+            <div><label className="text-xs text-gray-500 block mb-1">Threshold Pace</label><div className="text-sm text-gray-200 bg-surface-900 rounded-lg px-3 py-2">{athlete?.threshold_pace_min || "..."}–{athlete?.threshold_pace_max || "..."}/km</div></div>
+            <div><label className="text-xs text-gray-500 block mb-1">Max HR</label><div className="text-sm text-gray-200 bg-surface-900 rounded-lg px-3 py-2">{athlete?.max_hr || "..."} bpm</div></div>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs text-gray-500 block mb-1">Current Weight</label>
-              <input type="number" step="0.1" value={weight} onChange={(e) => setWeight(e.target.value)} className="w-full text-sm text-gray-200 bg-surface-900 border border-white/5 rounded-lg px-3 py-2 focus:outline-none focus:border-brand-500/50" />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 block mb-1">Body Fat %</label>
-              <input type="number" step="0.1" value={bodyFat} onChange={(e) => setBodyFat(e.target.value)} className="w-full text-sm text-gray-200 bg-surface-900 border border-white/5 rounded-lg px-3 py-2 focus:outline-none focus:border-brand-500/50" />
-            </div>
+            <div><label className="text-xs text-gray-500 block mb-1">Current Weight</label><input type="number" step="0.1" value={weight} onChange={(e) => setWeight(e.target.value)} className="w-full text-sm text-gray-200 bg-surface-900 border border-white/5 rounded-lg px-3 py-2 focus:outline-none focus:border-brand-500/50" /></div>
+            <div><label className="text-xs text-gray-500 block mb-1">Body Fat %</label><input type="number" step="0.1" value={bodyFat} onChange={(e) => setBodyFat(e.target.value)} className="w-full text-sm text-gray-200 bg-surface-900 border border-white/5 rounded-lg px-3 py-2 focus:outline-none focus:border-brand-500/50" /></div>
           </div>
           <button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-brand-600 text-white text-sm rounded-lg hover:bg-brand-700 transition-colors disabled:opacity-50">
             {saving ? "Saving..." : saved ? "✓ Saved!" : "Save Changes"}

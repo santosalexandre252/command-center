@@ -1,7 +1,8 @@
 "use client";
 import { useState, useEffect } from "react";
-import { mockWeek, burnoutScore, weeklyTSS } from "../../lib/mockData";
-import { getAthleteProfile, getRaces, getEnergyLog, upsertEnergyLog } from "../../lib/db";
+import { burnoutScore, weeklyTSS as mockTSS } from "../../lib/mockData";
+import { getAthleteProfile, getRaces, upsertEnergyLog } from "../../lib/db";
+import { getIntervalsProfile, getIntervalsActivities, getWeekStart, getWeekEnd } from "../../lib/intervals";
 import { daysUntil, getBurnoutColor, getBurnoutBg, getWorkDensityColor, getRaceTypeIcon } from "../../lib/utils";
 
 function EnergyStars({ value, onChange }) {
@@ -25,51 +26,62 @@ function BurnoutBadge({ score }) {
   );
 }
 
-function DayCard({ day, isToday, onEnergyChange }) {
-  const [energy, setEnergy] = useState(day.energy);
-  const workoutIcons = { run: "🏃", bike: "🚴", gym: "🏋️" };
+function ActivityCard({ activity, isToday }) {
+  const [energy, setEnergy] = useState(0);
+  const typeIcons = { Run: "🏃", Ride: "🚴", WeightTraining: "🏋️", VirtualRide: "🚴", Walk: "🚶", Swim: "🏊", Hike: "⛰️" };
+  const icon = typeIcons[activity.type] || "🏅";
+  const minutes = activity.moving_time ? Math.round(activity.moving_time / 60) : 0;
 
-  const handleEnergy = (val) => {
+  const handleEnergy = async (val) => {
     setEnergy(val);
-    if (onEnergyChange) onEnergyChange(day.date, val);
+    await upsertEnergyLog({ date: activity.date, energy: val });
   };
 
   return (
     <div className={`rounded-xl border p-4 transition-all ${
-      isToday ? "bg-brand-600/10 border-brand-500/30 ring-1 ring-brand-500/20"
-        : day.completed ? "bg-surface-850 border-white/5 opacity-80"
-        : "bg-surface-850 border-white/5"
+      isToday ? "bg-brand-600/10 border-brand-500/30 ring-1 ring-brand-500/20" : "bg-surface-850 border-white/5"
     }`}>
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <span className={`text-xs font-medium ${isToday ? "text-brand-400" : "text-gray-500"}`}>{isToday ? "TODAY" : day.day}</span>
-          <div className="text-[10px] text-gray-600">{day.date.split("-").slice(1).join("/")}</div>
-        </div>
-        {day.completed && <span className="text-emerald-500 text-sm">✓</span>}
+      <div className="flex items-center justify-between mb-2">
+        <span className={`text-xs font-medium ${isToday ? "text-brand-400" : "text-gray-500"}`}>
+          {isToday ? "TODAY" : new Date(activity.date + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short" })}
+        </span>
+        <span className="text-emerald-500 text-sm">✓</span>
       </div>
-      <div className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium mb-2 ${getWorkDensityColor(day.workDensity)}`}>{day.workDensity}</div>
-      <div className="mt-2 mb-3">
-        <div className="flex items-center gap-1.5 text-sm">
-          <span>{workoutIcons[day.workout.icon]}</span>
-          <span className="font-medium text-gray-200">{day.workout.name}</span>
-        </div>
-        <div className="flex gap-3 mt-1 text-[10px] text-gray-500">
-          <span>{day.workout.duration}min</span>
-          <span>TSS {day.workout.tss}</span>
-          <span>{day.workout.zone}</span>
-        </div>
+      <div className="flex items-center gap-1.5 text-sm mb-1">
+        <span>{icon}</span>
+        <span className="font-medium text-gray-200 truncate">{activity.name}</span>
       </div>
-      <div>
+      <div className="flex gap-3 mt-1 text-[10px] text-gray-500 flex-wrap">
+        {minutes > 0 && <span>{minutes}min</span>}
+        {activity.tss && <span>TSS {Math.round(activity.tss)}</span>}
+        {activity.distance && <span>{parseFloat(activity.distance).toFixed(1)}km</span>}
+        {activity.avg_hr && <span>♥ {activity.avg_hr}</span>}
+      </div>
+      <div className="mt-3">
         <div className="text-[10px] text-gray-500 mb-1">Energy</div>
-        <EnergyStars value={energy || 0} onChange={handleEnergy} />
+        <EnergyStars value={energy} onChange={handleEnergy} />
       </div>
     </div>
   );
 }
 
-function RaceCountdown({ race, athlete }) {
+function EmptyDayCard({ date, dayLabel }) {
+  const isToday = date === new Date().toISOString().split("T")[0];
+  return (
+    <div className={`rounded-xl border p-4 ${
+      isToday ? "bg-brand-600/10 border-brand-500/30 ring-1 ring-brand-500/20" : "bg-surface-850 border-white/5 opacity-60"
+    }`}>
+      <span className={`text-xs font-medium ${isToday ? "text-brand-400" : "text-gray-500"}`}>
+        {isToday ? "TODAY" : dayLabel}
+      </span>
+      <div className="text-[10px] text-gray-600 mt-1">{date.split("-").slice(1).join("/")}</div>
+      <div className="mt-3 text-xs text-gray-600 italic">Rest day</div>
+    </div>
+  );
+}
+
+function RaceCountdown({ race, ctl }) {
   const days = daysUntil(race.date);
-  const ctl = athlete?.ctl || 42;
   const fitnessPercent = Math.min(100, Math.round((ctl / race.target_ctl) * 100));
   const isOnTrack = fitnessPercent >= 80;
 
@@ -85,7 +97,7 @@ function RaceCountdown({ race, athlete }) {
       <div className="text-2xl font-bold text-white">{days}<span className="text-sm font-normal text-gray-500 ml-1">days</span></div>
       <div className="mt-2">
         <div className="flex justify-between text-[10px] text-gray-500 mb-1">
-          <span>Fitness: CTL {ctl}/{race.target_ctl}</span>
+          <span>CTL {Math.round(ctl)}/{race.target_ctl}</span>
           <span className={isOnTrack ? "text-emerald-400" : "text-amber-400"}>{isOnTrack ? "On track" : "Behind"}</span>
         </div>
         <div className="w-full bg-gray-800 rounded-full h-1.5">
@@ -99,24 +111,39 @@ function RaceCountdown({ race, athlete }) {
 export default function DashboardPage() {
   const [athlete, setAthlete] = useState(null);
   const [races, setRaces] = useState([]);
+  const [fitness, setFitness] = useState(null);
+  const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [intervalsConnected, setIntervalsConnected] = useState(false);
 
   useEffect(() => {
     async function loadData() {
+      // Load from Supabase
       const [profileData, racesData] = await Promise.all([
         getAthleteProfile(),
         getRaces(),
       ]);
       setAthlete(profileData);
       setRaces(racesData);
+
+      // Load from Intervals.icu
+      const [fitnessData, activitiesData] = await Promise.all([
+        getIntervalsProfile(),
+        getIntervalsActivities(getWeekStart(), getWeekEnd()),
+      ]);
+
+      if (fitnessData && fitnessData.ctl !== undefined) {
+        setFitness(fitnessData);
+        setIntervalsConnected(true);
+      }
+      if (activitiesData && activitiesData.length > 0) {
+        setActivities(activitiesData);
+      }
+
       setLoading(false);
     }
     loadData();
   }, []);
-
-  const handleEnergyChange = async (date, value) => {
-    await upsertEnergyLog({ date, energy: value });
-  };
 
   if (loading) {
     return (
@@ -126,69 +153,96 @@ export default function DashboardPage() {
     );
   }
 
-  // Use DB athlete or fallback
-  const ath = athlete || { weight: 76.2, target_weight: 71, body_fat: 22, target_body_fat: 15, ctl: 42, atl: 38, tsb: 4 };
+  const ctl = fitness?.ctl || athlete?.ctl || 42;
+  const atl = fitness?.atl || athlete?.atl || 38;
+  const tsb = fitness?.tsb ?? (ctl - atl);
+  const weight = fitness?.weight || athlete?.weight || 76.2;
+
+  // Build week grid — fill in days with activities
+  const weekStart = new Date(getWeekStart());
+  const today = new Date().toISOString().split("T")[0];
+  const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const weekDays = dayLabels.map((label, i) => {
+    const d = new Date(weekStart);
+    d.setDate(d.getDate() + i);
+    const dateStr = d.toISOString().split("T")[0];
+    const dayActivities = activities.filter((a) => a.date === dateStr);
+    return { label, date: dateStr, activities: dayActivities, isToday: dateStr === today };
+  });
+
+  // Calculate weekly TSS
+  const actualTSS = activities.reduce((sum, a) => sum + (a.tss || 0), 0);
 
   return (
     <div className="p-6 max-w-[1400px]">
+      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-white">Weekly Command Center</h1>
-          <p className="text-sm text-gray-500 mt-1">Week of March 2–8, 2026 · Build Phase — Week 3</p>
+          <p className="text-sm text-gray-500 mt-1">
+            Week of {weekStart.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} – {new Date(weekStart.getTime() + 6 * 86400000).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+            {intervalsConnected && <span className="text-emerald-400 ml-2">● Intervals.icu live</span>}
+          </p>
         </div>
         <BurnoutBadge score={burnoutScore} />
       </div>
 
+      {/* Weekly TSS */}
       <div className="bg-surface-850 border border-white/5 rounded-xl p-4 mb-6">
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm font-medium text-gray-300">Weekly TSS</span>
-          <span className="text-sm text-gray-400">{weeklyTSS.actual} / {weeklyTSS.planned}</span>
+          <span className="text-sm text-gray-400">{Math.round(actualTSS)}{intervalsConnected ? "" : " (mock)"}</span>
         </div>
         <div className="w-full bg-gray-800 rounded-full h-2">
-          <div className="bg-brand-500 h-2 rounded-full transition-all" style={{ width: `${weeklyTSS.percentage}%` }}></div>
-        </div>
-        <div className="flex justify-between mt-2 text-[10px] text-gray-500">
-          <span>{weeklyTSS.percentage}% complete</span>
-          <span>{weeklyTSS.planned - weeklyTSS.actual} TSS remaining</span>
+          <div className="bg-brand-500 h-2 rounded-full transition-all" style={{ width: `${Math.min(100, (actualTSS / 360) * 100)}%` }}></div>
         </div>
       </div>
 
+      {/* Weekly Grid */}
       <div className="grid grid-cols-7 gap-3 mb-6">
-        {mockWeek.map((day) => (
-          <DayCard key={day.day} day={day} isToday={day.isToday} onEnergyChange={handleEnergyChange} />
-        ))}
+        {weekDays.map((day) => {
+          if (day.activities.length > 0) {
+            return day.activities.map((act, i) => (
+              <ActivityCard key={act.id || `${day.date}-${i}`} activity={act} isToday={day.isToday} />
+            ));
+          }
+          return <EmptyDayCard key={day.date} date={day.date} dayLabel={day.label} />;
+        })}
       </div>
 
+      {/* Bottom Row */}
       <div className="grid grid-cols-12 gap-4">
         <div className="col-span-8">
           <h2 className="text-sm font-medium text-gray-400 mb-3">Race Countdowns</h2>
           <div className="grid grid-cols-4 gap-3">
             {races.map((race) => (
-              <RaceCountdown key={race.id} race={race} athlete={ath} />
+              <RaceCountdown key={race.id} race={race} ctl={ctl} />
             ))}
           </div>
         </div>
 
         <div className="col-span-4 space-y-3">
-          <h2 className="text-sm font-medium text-gray-400 mb-3">Quick Stats</h2>
+          <h2 className="text-sm font-medium text-gray-400 mb-3">
+            Quick Stats {intervalsConnected && <span className="text-emerald-400 text-[10px]">● live</span>}
+          </h2>
           <div className="bg-surface-850 border border-white/5 rounded-xl p-4">
             <div className="text-[10px] text-gray-500 mb-1">Fitness (CTL)</div>
-            <div className="text-2xl font-bold text-white">{ath.ctl || 42}</div>
+            <div className="text-2xl font-bold text-white">{Math.round(ctl)}</div>
           </div>
           <div className="bg-surface-850 border border-white/5 rounded-xl p-4">
             <div className="text-[10px] text-gray-500 mb-1">Fatigue (ATL)</div>
-            <div className="text-2xl font-bold text-white">{ath.atl || 38}</div>
+            <div className="text-2xl font-bold text-white">{Math.round(atl)}</div>
           </div>
           <div className="bg-surface-850 border border-white/5 rounded-xl p-4">
             <div className="text-[10px] text-gray-500 mb-1">Form (TSB)</div>
-            <div className={`text-2xl font-bold ${(ath.tsb || 4) >= 0 ? "text-emerald-400" : "text-amber-400"}`}>
-              {(ath.tsb || 4) > 0 ? "+" : ""}{ath.tsb || 4}
+            <div className={`text-2xl font-bold ${tsb >= 0 ? "text-emerald-400" : "text-amber-400"}`}>
+              {tsb > 0 ? "+" : ""}{Math.round(tsb)}
             </div>
           </div>
           <div className="bg-surface-850 border border-white/5 rounded-xl p-4">
             <div className="text-[10px] text-gray-500 mb-1">Weight</div>
-            <div className="text-2xl font-bold text-white">{ath.weight}<span className="text-sm font-normal text-gray-500">kg</span></div>
-            <div className="text-[10px] text-gray-500 mt-1">Target: {ath.target_weight}kg · {ath.body_fat}% → {ath.target_body_fat}%</div>
+            <div className="text-2xl font-bold text-white">{weight}<span className="text-sm font-normal text-gray-500">kg</span></div>
+            <div className="text-[10px] text-gray-500 mt-1">Target: {athlete?.target_weight || 71}kg</div>
           </div>
         </div>
       </div>
