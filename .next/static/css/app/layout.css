@@ -550,6 +550,9 @@ video {
 .ml-1 {
   margin-left: 0.25rem;
 }
+.ml-2 {
+  margin-left: 0.5rem;
+}
 .ml-\[260px\] {
   margin-left: 260px;
 }
@@ -1115,9 +1118,6 @@ video {
 .hover\:border-brand-500\/30:hover {
   border-color: rgb(42 133 255 / 0.3);
 }
-.hover\:bg-brand-600\/30:hover {
-  background-color: rgb(20 102 245 / 0.3);
-}
 .hover\:bg-brand-600\/5:hover {
   background-color: rgb(20 102 245 / 0.05);
 }
@@ -1146,6 +1146,9 @@ video {
 .focus\:ring-brand-500:focus {
   --tw-ring-opacity: 1;
   --tw-ring-color: rgb(42 133 255 / var(--tw-ring-opacity, 1));
+}
+.disabled\:opacity-50:disabled {
+  opacity: 0.5;
 }
 .dark\:bg-surface-950:is(.dark *) {
   --tw-bg-opacity: 1;
