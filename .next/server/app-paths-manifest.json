@@ -1,7 +1,5 @@
 {
+  "/page": "app/page.js",
   "/dashboard/page": "app/dashboard/page.js",
-  "/planner/page": "app/planner/page.js",
-  "/fuelling/page": "app/fuelling/page.js",
-  "/load/page": "app/load/page.js",
   "/api/intervals/route": "app/api/intervals/route.js"
 }
