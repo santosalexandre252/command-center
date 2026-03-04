@@ -67,7 +67,7 @@ export default function SettingsPage() {
           <ConnectionCard name="Apple Watch" icon="⌚" status="pending" description="HR, HRV, sleep, via Intervals.icu" />
           <ConnectionCard name="Smart Scale" icon="⚖️" status="pending" description="Weight, body fat, via Intervals.icu" />
           <ConnectionCard name="Google Calendar" icon="📅" status="pending" description="Work events, meetings, travel" />
-          <ConnectionCard name="Gemini API" icon="🤖" status="pending" description="AI — fast analysis, daily recommendations" />
+          <ConnectionCard name="Groq (Llama 3.3)" icon="🤖" status="connected" description="AI coach — connected and ready" />
         </div>
       </div>
 
