@@ -12,8 +12,8 @@ function ChartTooltip({ active, payload, label }) {
   return (
     <div className="bg-surface-900 border border-white/10 rounded-lg px-3 py-2 text-xs shadow-lg">
       <div className="text-gray-400 mb-1">{label}</div>
-      {payload.map((p) => (
-        <div key={p.dataKey} className="flex items-center gap-2">
+      {payload.map((p, i) => (
+        <div key={`${p.dataKey}-${i}`} className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }}></span>
           <span className="text-gray-300">{p.name}:</span>
           <span className="font-medium text-white">{p.value !== null && p.value !== undefined ? (typeof p.value === "number" ? Math.round(p.value * 10) / 10 : p.value) : "—"}</span>

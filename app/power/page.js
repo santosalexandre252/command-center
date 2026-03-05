@@ -1,7 +1,8 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart, BarChart, Bar, Area, ReferenceLine } from "recharts";
-import { getIntervalsActivities, getAthleteProfile } from "../../lib/intervals";
+import { getIntervalsActivities } from "../../lib/intervals";
+import { getAthleteProfile } from "../../lib/db";
 
 function ChartTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;

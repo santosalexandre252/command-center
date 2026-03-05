@@ -167,9 +167,9 @@ function TSSProgressBar({ actual, planned, label }) {
 
 function VolumeBreakdown({ activities, planned }) {
   const types = {};
-  activities.filter((a) => a.completed).forEach((a) => { const t = a.type || "Other"; if (!types[t]) types[t] = { actual: 0, count: 0 }; types[t].actual += a.tss || 0; types[t].count += 1; });
+  activities.filter((a) => a.completed).forEach((a) => { const t = a.type || "Other"; if (!types[t]) types[t] = { actual: 0, count: 0 }; types[t].actual += a.icu_training_load || a.tss || 0; types[t].count += 1; });
   const plannedTypes = {};
-  planned.forEach((p) => { const t = p.type || p.category || "Other"; if (!plannedTypes[t]) plannedTypes[t] = { planned: 0, count: 0 }; plannedTypes[t].planned += p.load_target || 0; plannedTypes[t].count += 1; });
+  planned.forEach((p) => { const t = p.type || p.category || "Other"; if (!plannedTypes[t]) plannedTypes[t] = { planned: 0, count: 0 }; plannedTypes[t].planned += p.load_target || p.tss || 0; plannedTypes[t].count += 1; });
   const typeIcons = { Run: "🏃", Ride: "🚴", WeightTraining: "🏋️", VirtualRide: "🚴", Swim: "🏊" };
   const allTypes = [...new Set([...Object.keys(types), ...Object.keys(plannedTypes)])];
   if (allTypes.length === 0) return null;
@@ -232,7 +232,7 @@ function WeightForecast({ races, currentWeight, targetWeight, onLoadForecast, fo
 
   if (!nextRace) return null;
 
-  const daysUntil = Math.ceil((new Date(nextRace.date) - new Date()) / (1000 * 60 * 60 * 24));
+  const daysToRace = Math.ceil((new Date(nextRace.date) - new Date()) / (1000 * 60 * 60 * 24));
   const raceTarget = nextRace.target_weight || targetWeight;
 
   return (
@@ -258,7 +258,7 @@ function WeightForecast({ races, currentWeight, targetWeight, onLoadForecast, fo
         </div>
         <div className="flex items-center justify-between">
           <span className="text-xs text-gray-400">Days to race</span>
-          <span className="text-sm font-medium text-white">{daysUntil}</span>
+          <span className="text-sm font-medium text-white">{daysToRace}</span>
         </div>
 
         {forecast && (
@@ -291,6 +291,8 @@ function ActivityAnalysis({ activities, onAnalyze, analysis }) {
     .slice(0, 3);
 
   if (recentActivities.length === 0) return null;
+
+  const typeIcons = { Run: "🏃", Ride: "🚴", WeightTraining: "🏋️", VirtualRide: "🚴", Walk: "🚶", Swim: "🏊", Hike: "⛰️" };
 
   return (
     <div className="bg-surface-850 border border-white/5 rounded-xl p-4">
@@ -355,20 +357,22 @@ export default function DashboardPage() {
   const [wellnessData, setWellnessData] = useState([]);
   const [activityAnalysis, setActivityAnalysis] = useState({});
   const [weightForecast, setWeightForecast] = useState(null);
+  const [weekStart, setWeekStart] = useState(null);
 
   useEffect(() => {
     async function loadData() {
-      const weekStart = getWeekStart();
-      const weekEnd = getWeekEnd();
+      const ws = getWeekStart();
+      const we = getWeekEnd();
+      setWeekStart(ws);
 
       const [profileData, racesData, fitnessData, activitiesData, plannedData, energyData, calData, recentWellness] = await Promise.all([
         getAthleteProfile(),
         getRaces(),
         getIntervalsProfile(),
-        getIntervalsActivities(weekStart, weekEnd),
-        getIntervalsPlannedWorkouts(weekStart, weekEnd),
-        getEnergyLogsRange(weekStart, weekEnd),
-        getCalendarEvents(weekStart, weekEnd),
+        getIntervalsActivities(ws, we),
+        getIntervalsPlannedWorkouts(ws, we),
+        getEnergyLogsRange(ws, we),
+        getCalendarEvents(ws, we),
         getIntervalsWellness(new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0], new Date().toISOString().split("T")[0]),
       ]);
 
@@ -400,55 +404,6 @@ export default function DashboardPage() {
     }
     loadData();
   }, []);
-
-  // Run guardrails on load
-  useEffect(() => {
-    if (loading) return;
-    const todayDate = new Date().toISOString().split("T")[0];
-    const todayDensity = calendarData[todayDate]?.density || "rest";
-    const todayPlannedItems = activities.filter((a) => a.date === todayDate && a.planned);
-    const todayPlanned = todayPlannedItems.length > 0 ? todayPlannedItems[0] : null;
-    const todayEnergyLog = energyLogs[todayDate];
-
-    // Compute values needed for guardrails
-    const ctl = fitness?.ctl || athlete?.ctl || 42;
-    const atl = fitness?.atl || athlete?.atl || 38;
-    const tsb = fitness?.tsb ?? (ctl - atl);
-    const workStress = calculateWorkStress(calendarData);
-    const hrvValues = wellnessData.filter((w) => w.hrv).map((w) => w.hrv);
-    const avg30HRV = hrvValues.length > 0 ? hrvValues.reduce((s, v) => s + v, 0) / hrvValues.length : null;
-    const hrvLast3 = hrvValues.slice(-3);
-    const recentSleep = wellnessData.slice(-3).map((w) => {
-      if (!w.sleep_duration) return null;
-      return w.sleep_duration > 100 ? w.sleep_duration / 60 : w.sleep_duration;
-    });
-    const energyValues = Object.values(energyLogs).filter((l) => l.energy).map((l) => l.energy);
-    const avgEnergy = energyValues.length > 0 ? (energyValues.reduce((a, b) => a + b, 0) / energyValues.length).toFixed(1) : null;
-    const avgSleep = recentSleep.filter(Boolean).length > 0 ? recentSleep.filter(Boolean).reduce((s, v) => s + v, 0) / recentSleep.filter(Boolean).length : null;
-    const burnout = calculateBurnoutSignals({
-      atl, ctl, tsb,
-      avg7HRV: hrvLast3.length > 0 ? hrvLast3.reduce((s, v) => s + v, 0) / hrvLast3.length : null,
-      avg30HRV,
-      avgSleep,
-      workStress,
-      avgEnergy: avgEnergy ? parseFloat(avgEnergy) : null,
-      calendarConnected,
-    });
-    const burnoutTotal = burnout.total;
-
-    const alerts = runGuardrails({
-      atl, ctl, tsb,
-      hrvLast3,
-      avg30HRV,
-      recentSleep,
-      todayWorkDensity: todayDensity,
-      kneeStatus: todayEnergyLog?.knee_status || 0,
-      todayPlanned,
-      energyLog: todayEnergyLog,
-      burnoutTotal,
-    });
-    setGuardrailAlerts(alerts);
-  }, [loading, activities, calendarData, energyLogs, wellnessData, fitness, athlete, calendarConnected]);
 
   const handleSaveCheckIn = async (log) => {
     const saved = await upsertEnergyLog(log);
@@ -488,6 +443,32 @@ export default function DashboardPage() {
   const atl = fitness?.atl || athlete?.atl || 38;
   const tsb = fitness?.tsb ?? (ctl - atl);
 
+  // Calculate weekly TSS and duration
+  const completedActivities = activities.filter((a) => a.completed);
+  const plannedActivities = activities.filter((a) => a.planned);
+  const actualTSS = completedActivities.reduce((sum, a) => sum + (a.icu_training_load || 0), 0);
+  const plannedTSS = plannedActivities.reduce((sum, a) => sum + (a.tss || 0), 0);
+  const actualDuration = completedActivities.reduce((sum, a) => sum + (a.moving_time || 0), 0) / 60; // convert to minutes
+  const plannedDuration = plannedActivities.reduce((sum, a) => sum + (a.moving_time || 0), 0) / 60; // convert to minutes
+
+  // Build week days array
+  const today = new Date().toISOString().split("T")[0];
+  const ws = getWeekStart(); // returns "YYYY-MM-DD" string
+  const weekDays = [];
+  const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(ws + "T00:00:00"); // convert string to Date with explicit time
+    d.setDate(d.getDate() + i);
+    const dateStr = d.toISOString().split("T")[0];
+    const dayActivities = activities.filter((a) => a.date === dateStr);
+    weekDays.push({
+      date: dateStr,
+      label: dayLabels[i],
+      isToday: dateStr === today,
+      activities: dayActivities,
+    });
+  }
+
   const energyValues = Object.values(energyLogs).filter((l) => l.energy).map((l) => l.energy);
   const avgEnergy = energyValues.length > 0 ? (energyValues.reduce((a, b) => a + b, 0) / energyValues.length).toFixed(1) : null;
 
@@ -502,6 +483,9 @@ export default function DashboardPage() {
   });
   const avgSleep = recentSleep.filter(Boolean).length > 0 ? recentSleep.filter(Boolean).reduce((s, v) => s + v, 0) / recentSleep.filter(Boolean).length : null;
 
+  // Get latest weight from wellness data
+  const weight = wellnessData.length > 0 && wellnessData[wellnessData.length - 1]?.weight ? wellnessData[wellnessData.length - 1].weight : athlete?.weight || 76.2;
+
   const burnout = calculateBurnoutSignals({
     atl, ctl, tsb,
     avg7HRV, avg30HRV,
@@ -512,7 +496,7 @@ export default function DashboardPage() {
   });
   const burnoutTotal = burnout.total;
 
-  // Run guardrails on load
+  // Update guardrails when key data changes
   useEffect(() => {
     if (loading) return;
     const todayDate = new Date().toISOString().split("T")[0];
@@ -533,7 +517,7 @@ export default function DashboardPage() {
       burnoutTotal,
     });
     setGuardrailAlerts(alerts);
-  }, [loading, activities, calendarData, energyLogs, wellnessData]);
+  }, [loading, activities, calendarData, energyLogs, wellnessData, ctl, atl, tsb]);
 
   return (
     <div className="p-6 max-w-[1400px]">
@@ -543,7 +527,11 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-2xl font-bold text-white">Weekly Command Center</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Week of {weekStart.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} – {new Date(weekStart.getTime() + 6 * 86400000).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+            {weekStart ? (() => {
+              const start = new Date(weekStart + "T00:00:00");
+              const end = new Date(start.getTime() + 6 * 86400000);
+              return `Week of ${start.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} – ${end.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`;
+            })() : "Loading..."}
             {intervalsConnected && <span className="text-emerald-400 ml-2">● Training</span>}
             {calendarConnected && <span className="text-blue-400 ml-2">● Calendar</span>}
           </p>

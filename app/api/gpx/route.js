@@ -4,14 +4,22 @@ import { createClient } from "@supabase/supabase-js";
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-if (!supabaseUrl || !supabaseServiceKey) {
-  throw new Error("Missing Supabase environment variables");
-}
-
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+// Initialize Supabase client only if credentials are available
+const supabase = supabaseUrl && supabaseServiceKey 
+  ? createClient(supabaseUrl, supabaseServiceKey)
+  : null;
 
 export async function POST(request) {
   try {
+    // Check if Supabase is configured
+    if (!supabase) {
+      console.warn("Supabase not configured: GPX upload disabled");
+      return NextResponse.json(
+        { error: "GPX feature is not configured. Set SUPABASE_SERVICE_ROLE_KEY in environment variables." },
+        { status: 503 }
+      );
+    }
+
     const formData = await request.formData();
     const file = formData.get("gpx");
     const raceId = formData.get("raceId");
@@ -36,7 +44,7 @@ export async function POST(request) {
 
     if (error) {
       console.error("Upload error:", error);
-      return NextResponse.json({ error: "Failed to upload GPX file" }, { status: 500 });
+      return NextResponse.json({ error: "Failed to upload GPX file", details: error.message }, { status: 500 });
     }
 
     // Get public URL
@@ -52,12 +60,21 @@ export async function POST(request) {
 
   } catch (err) {
     console.error("GPX upload error:", err);
-    return NextResponse.json({ error: "Failed to upload GPX file" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to upload GPX file", details: err.message },
+      { status: 500 }
+    );
   }
 }
 
 export async function GET(request) {
   try {
+    // Check if Supabase is configured
+    if (!supabase) {
+      console.warn("Supabase not configured: GPX feature disabled");
+      return NextResponse.json({ exists: false });
+    }
+
     const { searchParams } = new URL(request.url);
     const raceId = searchParams.get("raceId");
 
@@ -72,7 +89,13 @@ export async function GET(request) {
       .from("gpx-files")
       .list(`races/${raceId}`);
 
-    if (error || !data || data.length === 0) {
+    if (error) {
+      // Bucket doesn't exist or access denied - treat as no file
+      console.warn(`GPX bucket access issue for race ${raceId}:`, error.message);
+      return NextResponse.json({ exists: false });
+    }
+
+    if (!data || data.length === 0) {
       return NextResponse.json({ exists: false });
     }
 
@@ -88,6 +111,7 @@ export async function GET(request) {
 
   } catch (err) {
     console.error("GPX check error:", err);
-    return NextResponse.json({ error: "Failed to check GPX file" }, { status: 500 });
+    // Return gracefully - GPX is optional
+    return NextResponse.json({ exists: false });
   }
 }

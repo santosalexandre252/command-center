@@ -122,7 +122,32 @@ export default function GPXMap({ raceId, athlete }) {
     async function loadGPX() {
       try {
         const res = await fetch(`/api/gpx?raceId=${raceId}`);
+        
+        // Check if response is ok
+        if (!res.ok) {
+          console.error(`GPX API error: ${res.status} ${res.statusText}`);
+          setError("Failed to load GPX data");
+          setLoading(false);
+          return;
+        }
+
+        // Check if we can parse as JSON
+        const contentType = res.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          console.error("Invalid response content type:", contentType);
+          setError("Invalid API response");
+          setLoading(false);
+          return;
+        }
+
         const data = await res.json();
+
+        // Check for Supabase configuration error
+        if (res.status === 503) {
+          console.warn("GPX feature not configured:", data.error);
+          setLoading(false); // Just show empty state
+          return;
+        }
 
         if (!data.exists) {
           setLoading(false);
@@ -131,17 +156,25 @@ export default function GPXMap({ raceId, athlete }) {
 
         // Fetch and parse GPX
         const gpxRes = await fetch(data.publicUrl);
+        if (!gpxRes.ok) {
+          console.error(`GPX file fetch error: ${gpxRes.status}`);
+          setError("Failed to fetch GPX file");
+          setLoading(false);
+          return;
+        }
+
         const gpxText = await gpxRes.text();
         const parsed = parseGPX(gpxText);
 
         if (parsed.points.length > 0) {
           setGpxData(parsed);
         }
+        setLoading(false);
       } catch (err) {
         console.error("GPX load error:", err);
         setError("Failed to load GPX data");
+        setLoading(false);
       }
-      setLoading(false);
     }
 
     if (raceId) {
@@ -173,6 +206,31 @@ export default function GPXMap({ raceId, athlete }) {
           </div>
           <div className="text-gray-600 text-xs">
             Upload a GPX file in Settings to view the interactive course map
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Check for loading state
+  if (loading) {
+    return (
+      <div className="bg-surface-850 border border-white/5 rounded-xl p-6 h-96 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-gray-500 text-sm">Loading course map...</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Check for error state
+  if (error || !gpxData) {
+    return (
+      <div className="bg-surface-850 border border-white/5 rounded-xl p-6 h-96 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-amber-500 text-sm mb-2">⚠️ {error || "No GPX data available"}</div>
+          <div className="text-gray-600 text-xs">
+            {error === "Failed to load GPX data" ? "Could not load the course map data. Please try again." : "No course map has been uploaded for this race yet."}
           </div>
         </div>
       </div>
