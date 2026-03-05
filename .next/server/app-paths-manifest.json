@@ -1,10 +1,6 @@
 {
-  "/dashboard/page": "app/dashboard/page.js",
-  "/load/page": "app/load/page.js",
-  "/race/[id]/page": "app/race/[id]/page.js",
   "/page": "app/page.js",
+  "/dashboard/page": "app/dashboard/page.js",
   "/api/intervals/route": "app/api/intervals/route.js",
-  "/api/race-plan/route": "app/api/race-plan/route.js",
-  "/planner/page": "app/planner/page.js",
-  "/races/page": "app/races/page.js"
+  "/settings/page": "app/settings/page.js"
 }
