@@ -225,6 +225,120 @@ function WorkWeekSummary({ calendarData }) {
   );
 }
 
+function WeightForecast({ races, currentWeight, targetWeight, onLoadForecast, forecast }) {
+  const nextRace = races
+    .filter(r => new Date(r.date) > new Date())
+    .sort((a, b) => new Date(a.date) - new Date(b.date))[0];
+
+  if (!nextRace) return null;
+
+  const daysUntil = Math.ceil((new Date(nextRace.date) - new Date()) / (1000 * 60 * 60 * 24));
+  const raceTarget = nextRace.target_weight || targetWeight;
+
+  return (
+    <div className="bg-surface-850 border border-white/5 rounded-xl p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-medium text-gray-300">Weight Forecast</h3>
+        <button
+          onClick={() => onLoadForecast(nextRace.id)}
+          className="text-[10px] px-2 py-1 rounded bg-brand-600/20 text-brand-400 hover:bg-brand-600/30 transition-colors"
+        >
+          {forecast ? "Refresh" : "Forecast"}
+        </button>
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-gray-400">Current</span>
+          <span className="text-sm font-medium text-white">{currentWeight}kg</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-gray-400">Target ({nextRace.short_name})</span>
+          <span className="text-sm font-medium text-emerald-400">{raceTarget}kg</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-gray-400">Days to race</span>
+          <span className="text-sm font-medium text-white">{daysUntil}</span>
+        </div>
+
+        {forecast && (
+          <div className="pt-3 border-t border-white/5">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-gray-400">Projected</span>
+              <span className={`text-sm font-medium ${forecast.willMeetTarget ? "text-emerald-400" : "text-amber-400"}`}>
+                {forecast.projectedWeight}kg
+              </span>
+            </div>
+            <div className="text-[10px] text-gray-500 mb-2">
+              Trend: {forecast.currentTrend.direction} {forecast.currentTrend.rate > 0 && `(${forecast.currentTrend.rate.toFixed(1)}kg/week)`}
+            </div>
+            {forecast.recommendations?.slice(0, 1).map((rec, i) => (
+              <div key={i} className={`text-xs p-2 rounded ${rec.priority === "high" ? "bg-red-500/10 text-red-400" : "bg-amber-500/10 text-amber-400"}`}>
+                {rec.action}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ActivityAnalysis({ activities, onAnalyze, analysis }) {
+  const recentActivities = activities
+    .filter(a => a.completed && a.start_date_local)
+    .sort((a, b) => new Date(b.start_date_local) - new Date(a.start_date_local))
+    .slice(0, 3);
+
+  if (recentActivities.length === 0) return null;
+
+  return (
+    <div className="bg-surface-850 border border-white/5 rounded-xl p-4">
+      <h3 className="text-sm font-medium text-gray-300 mb-3">Recent Workouts</h3>
+      <div className="space-y-3">
+        {recentActivities.map((activity) => {
+          const analysisData = analysis[activity.id];
+          const icon = typeIcons[activity.type] || "🏅";
+          const date = new Date(activity.start_date_local).toLocaleDateString();
+          const duration = activity.moving_time ? Math.round(activity.moving_time / 60) : 0;
+          const tss = activity.icu_training_load ? Math.round(activity.icu_training_load) : 0;
+
+          return (
+            <div key={activity.id} className="border border-white/5 rounded-lg p-3">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span>{icon}</span>
+                  <span className="text-sm font-medium text-gray-200 truncate">{activity.name}</span>
+                </div>
+                <span className="text-[10px] text-gray-500">{date}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex gap-3 text-[10px] text-gray-500">
+                  {duration > 0 && <span>{duration}m</span>}
+                  {tss > 0 && <span>TSS {tss}</span>}
+                  {activity.distance && <span>{(activity.distance / 1000).toFixed(1)}km</span>}
+                </div>
+                <button
+                  onClick={() => onAnalyze(activity.id)}
+                  className="text-[10px] px-2 py-1 rounded bg-brand-600/20 text-brand-400 hover:bg-brand-600/30 transition-colors"
+                  disabled={analysisData}
+                >
+                  {analysisData ? "Analyzed" : "Analyze"}
+                </button>
+              </div>
+              {analysisData && (
+                <div className="mt-3 pt-3 border-t border-white/5">
+                  <p className="text-xs text-gray-300 leading-relaxed">{analysisData.aiAnalysis}</p>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const [athlete, setAthlete] = useState(null);
   const [races, setRaces] = useState([]);
@@ -239,6 +353,8 @@ export default function DashboardPage() {
   const [checkInDate, setCheckInDate] = useState(null);
   const [guardrailAlerts, setGuardrailAlerts] = useState([]);
   const [wellnessData, setWellnessData] = useState([]);
+  const [activityAnalysis, setActivityAnalysis] = useState({});
+  const [weightForecast, setWeightForecast] = useState(null);
 
   useEffect(() => {
     async function loadData() {
@@ -285,9 +401,86 @@ export default function DashboardPage() {
     loadData();
   }, []);
 
+  // Run guardrails on load
+  useEffect(() => {
+    if (loading) return;
+    const todayDate = new Date().toISOString().split("T")[0];
+    const todayDensity = calendarData[todayDate]?.density || "rest";
+    const todayPlannedItems = activities.filter((a) => a.date === todayDate && a.planned);
+    const todayPlanned = todayPlannedItems.length > 0 ? todayPlannedItems[0] : null;
+    const todayEnergyLog = energyLogs[todayDate];
+
+    // Compute values needed for guardrails
+    const ctl = fitness?.ctl || athlete?.ctl || 42;
+    const atl = fitness?.atl || athlete?.atl || 38;
+    const tsb = fitness?.tsb ?? (ctl - atl);
+    const workStress = calculateWorkStress(calendarData);
+    const hrvValues = wellnessData.filter((w) => w.hrv).map((w) => w.hrv);
+    const avg30HRV = hrvValues.length > 0 ? hrvValues.reduce((s, v) => s + v, 0) / hrvValues.length : null;
+    const hrvLast3 = hrvValues.slice(-3);
+    const recentSleep = wellnessData.slice(-3).map((w) => {
+      if (!w.sleep_duration) return null;
+      return w.sleep_duration > 100 ? w.sleep_duration / 60 : w.sleep_duration;
+    });
+    const energyValues = Object.values(energyLogs).filter((l) => l.energy).map((l) => l.energy);
+    const avgEnergy = energyValues.length > 0 ? (energyValues.reduce((a, b) => a + b, 0) / energyValues.length).toFixed(1) : null;
+    const avgSleep = recentSleep.filter(Boolean).length > 0 ? recentSleep.filter(Boolean).reduce((s, v) => s + v, 0) / recentSleep.filter(Boolean).length : null;
+    const burnout = calculateBurnoutSignals({
+      atl, ctl, tsb,
+      avg7HRV: hrvLast3.length > 0 ? hrvLast3.reduce((s, v) => s + v, 0) / hrvLast3.length : null,
+      avg30HRV,
+      avgSleep,
+      workStress,
+      avgEnergy: avgEnergy ? parseFloat(avgEnergy) : null,
+      calendarConnected,
+    });
+    const burnoutTotal = burnout.total;
+
+    const alerts = runGuardrails({
+      atl, ctl, tsb,
+      hrvLast3,
+      avg30HRV,
+      recentSleep,
+      todayWorkDensity: todayDensity,
+      kneeStatus: todayEnergyLog?.knee_status || 0,
+      todayPlanned,
+      energyLog: todayEnergyLog,
+      burnoutTotal,
+    });
+    setGuardrailAlerts(alerts);
+  }, [loading, activities, calendarData, energyLogs, wellnessData, fitness, athlete, calendarConnected]);
+
   const handleSaveCheckIn = async (log) => {
     const saved = await upsertEnergyLog(log);
     if (saved) setEnergyLogs((prev) => ({ ...prev, [log.date]: saved }));
+  };
+
+  const handleAnalyzeActivity = async (activityId) => {
+    try {
+      const res = await fetch("/api/analysis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ activityId }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setActivityAnalysis((prev) => ({ ...prev, [activityId]: data.analysis }));
+      }
+    } catch (err) {
+      console.error("Analysis failed:", err);
+    }
+  };
+
+  const loadWeightForecast = async (raceId) => {
+    try {
+      const res = await fetch(`/api/forecast?raceId=${raceId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setWeightForecast(data);
+      }
+    } catch (err) {
+      console.error("Forecast failed:", err);
+    }
   };
 
   if (loading) return <div className="p-6 flex items-center justify-center h-64"><div className="text-gray-500 text-sm">Loading dashboard...</div></div>;
@@ -336,29 +529,6 @@ export default function DashboardPage() {
     calendarConnected,
   });
   const burnoutTotal = burnout.total;
-
-  // Run guardrails on load
-  useEffect(() => {
-    if (loading) return;
-    const todayDate = new Date().toISOString().split("T")[0];
-    const todayDensity = calendarData[todayDate]?.density || "rest";
-    const todayPlannedItems = activities.filter((a) => a.date === todayDate && a.planned);
-    const todayPlanned = todayPlannedItems.length > 0 ? todayPlannedItems[0] : null;
-    const todayEnergyLog = energyLogs[todayDate];
-
-    const alerts = runGuardrails({
-      atl, ctl, tsb,
-      hrvLast3,
-      avg30HRV,
-      recentSleep,
-      todayWorkDensity: todayDensity,
-      kneeStatus: todayEnergyLog?.knee_status || 0,
-      todayPlanned,
-      energyLog: todayEnergyLog,
-      burnoutTotal,
-    });
-    setGuardrailAlerts(alerts);
-  }, [loading, activities, calendarData, energyLogs, wellnessData]);
 
   return (
     <div className="p-6 max-w-[1400px]">
@@ -424,6 +594,7 @@ export default function DashboardPage() {
         <div className="col-span-8 space-y-4">
           {calendarConnected && <WorkWeekSummary calendarData={calendarData} />}
           <VolumeBreakdown activities={activities} planned={planned} />
+          <ActivityAnalysis activities={activities} onAnalyze={handleAnalyzeActivity} analysis={activityAnalysis} />
           <div>
             <h2 className="text-sm font-medium text-gray-400 mb-3">Race Countdowns</h2>
             <div className="grid grid-cols-4 gap-3">
@@ -437,6 +608,7 @@ export default function DashboardPage() {
           <div className="bg-surface-850 border border-white/5 rounded-xl p-4"><div className="text-[10px] text-gray-500 mb-1">Fatigue (ATL)</div><div className="text-2xl font-bold text-white">{Math.round(atl)}</div></div>
           <div className="bg-surface-850 border border-white/5 rounded-xl p-4"><div className="text-[10px] text-gray-500 mb-1">Form (TSB)</div><div className={`text-2xl font-bold ${tsb >= 0 ? "text-emerald-400" : "text-amber-400"}`}>{tsb > 0 ? "+" : ""}{Math.round(tsb)}</div></div>
           <div className="bg-surface-850 border border-white/5 rounded-xl p-4"><div className="text-[10px] text-gray-500 mb-1">Weight</div><div className="text-2xl font-bold text-white">{weight}<span className="text-sm font-normal text-gray-500">kg</span></div><div className="text-[10px] text-gray-500 mt-1">Target: {athlete?.target_weight || 71}kg</div></div>
+          <WeightForecast races={races} currentWeight={weight} targetWeight={athlete?.target_weight || 71} onLoadForecast={loadWeightForecast} forecast={weightForecast} />
         </div>
       </div>
     </div>

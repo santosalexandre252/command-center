@@ -253,7 +253,7 @@ export default function LoadPage() {
               <YAxis tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} />
               <Tooltip content={<ChartTooltip />} />
               <ReferenceLine y={0} stroke="#374151" strokeDasharray="3 3" />
-              <Area type="monotone" dataKey="TSB" name="Form (TSB)" fill="#22c55e" fillOpacity={0.08} stroke="none" />
+              <Area type="monotone" dataKey="TSB" fill="#22c55e" fillOpacity={0.08} stroke="none" />
               <Line type="monotone" dataKey="CTL" name="Fitness (CTL)" stroke="#3b82f6" strokeWidth={2} dot={false} />
               <Line type="monotone" dataKey="ATL" name="Fatigue (ATL)" stroke="#ec4899" strokeWidth={2} dot={false} />
               <Line type="monotone" dataKey="TSB" name="Form (TSB)" stroke="#22c55e" strokeWidth={1.5} strokeDasharray="4 4" dot={false} />

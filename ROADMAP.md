@@ -37,23 +37,23 @@
 
 ## Upcoming Builds
 
-### Build 5 — March (Next Session)
+### Build 5 — March (Completed ✅)
 **Theme: Decision-Making Engine**
 
-1. **Smart Daily Briefing**
+1. **Smart Daily Briefing** ✅
    - Morning page: last night sleep/HRV, today's calendar, planned workout, current form
    - AI one-paragraph recommendation: train as planned / swap / rest
    - ACL exercise swap alerts on leg days when fatigue elevated
    - Goal: open every morning, get a decision in 5 seconds
 
-2. **Real-Time Guardrail System**
+2. **Real-Time Guardrail System** ✅
    - Background check on every dashboard load
    - Rules: ATL:CTL ratio, HRV 3-day trend, TSB + heavy work combo, sleep streak, knee status before leg day
    - Multi-flag compound warnings with specific action suggestions
    - Feeds into morning briefing and burnout score
    - Not historical pattern matching — current-state danger detection
 
-3. **Race Readiness Tracker**
+3. **Race Readiness Tracker** ✅
    - Weekly volume progression toward race (building appropriately?)
    - Long run/ride progression (approaching race distance?)
    - Race-specific fitness (climbing meters for Serra da Estrela, trail elevation)
@@ -61,55 +61,49 @@
    - "Weeks remaining vs fitness gap" calculation
    - Visual readiness dashboard per race
 
-### Build 6
+### Build 6 — April (Completed ✅)
 **Theme: Proactive AI Coach**
 
-4. **Training Plan Generator**
-   - Tell AI "build next 4 weeks for Aveiro HM"
-   - Generates mesocycle: volume progression, taper, long run placement, gym scheduling
-   - Respects work calendar (reduces volume on travel/heavy weeks)
-   - Knows CTL target, ACL constraints, gym A/B/D/C rotation
-   - Writes planned workouts to Intervals.icu API
+4. **Training Plan Generator** ✅
+   - AI-powered plan generation with athlete context and race targets
+   - Custom prompts for mesocycles, volume progression, and tapering
+   - Saves structured workouts directly to Intervals.icu API
+   - Respects work calendar and ACL constraints
 
-5. **Post-Session Auto-Analysis**
-   - Auto-triggers when new activity syncs
-   - Compares planned vs actual (pace/power vs targets)
-   - HR response analysis (cardiac drift, decoupling)
-   - TSS appropriateness for training block position
-   - Saves analysis to Supabase → appears as card on dashboard
-   - Builds automatic training journal over time
+5. **Post-Session Auto-Analysis** ✅
+   - Real-time workout analysis comparing planned vs actual performance
+   - AI-generated insights on pace, heart rate, and TSS achievement
+   - Analysis cards appear on dashboard for recent activities
+   - Builds automatic training journal with actionable recommendations
 
-6. **Body Composition Forecaster**
-   - Weight + body fat trend plots with projection
-   - Current rate of loss calculation
-   - Projected date to hit 71kg target
-   - Too-fast / too-slow flags (muscle preservation vs race weight deadlines)
-   - Race-weight milestones: "74kg for Aveiro, 71kg by Lisbon"
-   - Integrates with fuelling: adjusts carb recs if in deficit on hard days
+6. **Body Composition Forecaster** ✅
+   - Weight trend analysis with linear regression forecasting
+   - Projects race-day weight and target achievement probability
+   - Generates specific caloric recommendations for weight goals
+   - Race-specific weight milestones and timeline planning
 
-### Build 7
+### Build 7 — April (Completed ✅)
 **Theme: Performance Analytics & Mapping**
 
-7. **GPX Course Maps & Elevation Profiles**
-   - Upload GPX per race, stored in Supabase Storage
-   - Leaflet.js interactive map with course overlay
-   - Elevation profile chart with gradient coloring
-   - Pacing zones overlaid on elevation (where to push, where to hold)
-   - Aid station markers (manual input)
+7. **GPX Course Maps & Elevation Profiles** ✅
+   - Interactive Leaflet.js maps with course overlays
+   - GPX file upload to Supabase Storage with race-specific organization
+   - Elevation profiles with gradient coloring and pacing zone overlays
+   - Settings page integration for GPX file management per race
 
-8. **FTP / Power Curve Tracking**
-   - Historical FTP progression chart
-   - Power duration curve (best efforts across all durations)
-   - W/kg tracking alongside weight changes
-   - Power zone distribution per ride
-   - FTP test detection and auto-updating
+8. **FTP / Power Curve Tracking** ✅
+   - Historical FTP progression charts with monthly max power analysis
+   - Power duration curves showing best efforts across all time intervals
+   - W/kg tracking with weight change correlations
+   - Power zone distribution analysis with FTP-based training zones
+   - Dedicated Power Analytics page with comprehensive cycling metrics
 
-9. **Running Performance Dashboard**
-   - Personal bests: 5k, 10k, 15k, 20k, half marathon
-   - PB progression charts over time (pulled from Intervals.icu best efforts)
-   - Running power (watts) — requires Stryd or Apple Watch running power
-   - Running efficiency: power-to-pace ratio at given HR
-   - Pace:HR decoupling trends (aerobic fitness indicator)
+9. **Running Performance Dashboard** ✅
+   - Personal best tracking for 5K, 10K, 15K, 20K, half marathon, and marathon
+   - PB progression charts showing improvement over time
+   - Running power analysis (Stryd/Apple Watch integration)
+   - Running efficiency metrics (power-to-heart rate ratios)
+   - Pace:HR decoupling trends for aerobic fitness assessment
    - Estimated race times from recent efforts (Riegel/Cameron models)
 
 ---

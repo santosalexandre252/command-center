@@ -7,6 +7,7 @@ import { getRaceById, getAthleteProfile } from "../../../lib/db";
 import { getIntervalsProfile, getIntervalsActivities, getIntervalsWellness } from "../../../lib/intervals";
 import { daysUntil, formatDate, getRaceTypeIcon } from "../../../lib/utils";
 import { calculateRaceReadiness } from "../../../lib/guardrails";
+import GPXMap from "../../../components/GPXMap";
 
 function PlanButton({ label, emoji, planType, onGenerate, isActive, isLoading }) {
   return (
@@ -380,13 +381,8 @@ export default function RaceDetailPage() {
             )}
           </div>
 
-          {/* GPX placeholder */}
-          <div className="bg-surface-850 border border-white/5 rounded-xl p-6 h-48 flex items-center justify-center">
-            <div className="text-center">
-              <div className="text-gray-500 text-sm mb-2">Interactive Race Map</div>
-              <div className="text-gray-600 text-xs">Upload GPX file in Settings to render the course</div>
-            </div>
-          </div>
+          {/* Course Map & Elevation */}
+          <GPXMap raceId={race.id} athlete={athlete} />
         </div>
       </div>
     </div>
