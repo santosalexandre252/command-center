@@ -4,6 +4,9 @@ import { getAthleteProfile, getRaces, upsertEnergyLog, getEnergyLogsRange } from
 import { getIntervalsProfile, getIntervalsActivities, getIntervalsPlannedWorkouts, getWeekStart, getWeekEnd } from "../../lib/intervals";
 import { getCalendarEvents } from "../../lib/calendar";
 import { daysUntil, getBurnoutColor, getBurnoutBg, getRaceTypeIcon, getWorkDensityColor } from "../../lib/utils";
+import { calculateBurnoutSignals, calculateWorkStress, runGuardrails } from "../../lib/guardrails";
+import { getIntervalsWellness } from "../../lib/intervals";
+import Link from "next/link";
 
 function EnergyStars({ value, onChange, size = "text-lg" }) {
   return (
@@ -234,13 +237,15 @@ export default function DashboardPage() {
   const [intervalsConnected, setIntervalsConnected] = useState(false);
   const [calendarConnected, setCalendarConnected] = useState(false);
   const [checkInDate, setCheckInDate] = useState(null);
+  const [guardrailAlerts, setGuardrailAlerts] = useState([]);
+  const [wellnessData, setWellnessData] = useState([]);
 
   useEffect(() => {
     async function loadData() {
       const weekStart = getWeekStart();
       const weekEnd = getWeekEnd();
 
-      const [profileData, racesData, fitnessData, activitiesData, plannedData, energyData, calData] = await Promise.all([
+      const [profileData, racesData, fitnessData, activitiesData, plannedData, energyData, calData, recentWellness] = await Promise.all([
         getAthleteProfile(),
         getRaces(),
         getIntervalsProfile(),
@@ -248,6 +253,7 @@ export default function DashboardPage() {
         getIntervalsPlannedWorkouts(weekStart, weekEnd),
         getEnergyLogsRange(weekStart, weekEnd),
         getCalendarEvents(weekStart, weekEnd),
+        getIntervalsWellness(new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0], new Date().toISOString().split("T")[0]),
       ]);
 
       setAthlete(profileData);
@@ -271,6 +277,8 @@ export default function DashboardPage() {
         setCalendarData(calData.dailySummary);
         setCalendarConnected(true);
       }
+
+      setWellnessData(recentWellness || []);
 
       setLoading(false);
     }
@@ -307,13 +315,50 @@ export default function DashboardPage() {
   const energyValues = Object.values(energyLogs).filter((l) => l.energy).map((l) => l.energy);
   const avgEnergy = energyValues.length > 0 ? (energyValues.reduce((a, b) => a + b, 0) / energyValues.length).toFixed(1) : null;
 
-  // Compute burnout with work stress
-  const heavyWorkDays = Object.values(calendarData).filter((d) => d.density === "heavy" || d.density === "travel").length;
-  const workStress = Math.min(100, heavyWorkDays * 20 + Object.values(calendarData).reduce((s, d) => s + d.count, 0) * 5);
-  const burnoutTraining = atl ? Math.round(Math.min(100, (atl / 80) * 100)) : 40;
-  const burnoutTSB = tsb !== null ? Math.round(Math.max(0, Math.min(100, 50 - tsb * 3))) : 40;
-  const burnoutWork = calendarConnected ? workStress : 40;
-  const burnoutTotal = Math.round(burnoutTraining * 0.35 + burnoutTSB * 0.25 + burnoutWork * 0.25 + (avgEnergy ? Math.max(0, (5 - avgEnergy) * 20) : 40) * 0.15);
+  // Compute burnout with shared guardrails engine
+  const workStress = calculateWorkStress(calendarData);
+  const hrvValues = wellnessData.filter((w) => w.hrv).map((w) => w.hrv);
+  const avg30HRV = hrvValues.length > 0 ? hrvValues.reduce((s, v) => s + v, 0) / hrvValues.length : null;
+  const hrvLast3 = hrvValues.slice(-3);
+  const avg7HRV = hrvLast3.length > 0 ? hrvLast3.reduce((s, v) => s + v, 0) / hrvLast3.length : null;
+  const recentSleep = wellnessData.slice(-3).map((w) => {
+    if (!w.sleep_duration) return null;
+    return w.sleep_duration > 100 ? w.sleep_duration / 60 : w.sleep_duration;
+  });
+  const avgSleep = recentSleep.filter(Boolean).length > 0 ? recentSleep.filter(Boolean).reduce((s, v) => s + v, 0) / recentSleep.filter(Boolean).length : null;
+
+  const burnout = calculateBurnoutSignals({
+    atl, ctl, tsb,
+    avg7HRV, avg30HRV,
+    avgSleep,
+    workStress,
+    avgEnergy: avgEnergy ? parseFloat(avgEnergy) : null,
+    calendarConnected,
+  });
+  const burnoutTotal = burnout.total;
+
+  // Run guardrails on load
+  useEffect(() => {
+    if (loading) return;
+    const todayDate = new Date().toISOString().split("T")[0];
+    const todayDensity = calendarData[todayDate]?.density || "rest";
+    const todayPlannedItems = activities.filter((a) => a.date === todayDate && a.planned);
+    const todayPlanned = todayPlannedItems.length > 0 ? todayPlannedItems[0] : null;
+    const todayEnergyLog = energyLogs[todayDate];
+
+    const alerts = runGuardrails({
+      atl, ctl, tsb,
+      hrvLast3,
+      avg30HRV,
+      recentSleep,
+      todayWorkDensity: todayDensity,
+      kneeStatus: todayEnergyLog?.knee_status || 0,
+      todayPlanned,
+      energyLog: todayEnergyLog,
+      burnoutTotal,
+    });
+    setGuardrailAlerts(alerts);
+  }, [loading, activities, calendarData, energyLogs, wellnessData]);
 
   return (
     <div className="p-6 max-w-[1400px]">
@@ -336,6 +381,33 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Guardrail Alerts */}
+      {guardrailAlerts.length > 0 && (
+        <div className="mb-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs font-medium text-gray-400">Active Alerts</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400">{guardrailAlerts.length}</span>
+            <Link href="/briefing" className="text-[10px] text-brand-400 ml-auto hover:underline">View full briefing</Link>
+          </div>
+          <div className="space-y-2">
+            {guardrailAlerts.slice(0, 2).map((alert) => (
+              <div key={alert.id} className={`flex items-start gap-3 p-3 rounded-xl border ${
+                alert.severity === "danger" ? "border-red-500/30 bg-red-500/5" : "border-amber-500/30 bg-amber-500/5"
+              }`}>
+                <span className="text-base">{alert.icon}</span>
+                <div className="flex-1 min-w-0">
+                  <div className={`text-xs font-medium ${alert.severity === "danger" ? "text-red-400" : "text-amber-400"}`}>{alert.title}</div>
+                  <p className="text-[10px] text-gray-400 mt-0.5">{alert.action}</p>
+                </div>
+              </div>
+            ))}
+            {guardrailAlerts.length > 2 && (
+              <Link href="/briefing" className="text-[10px] text-gray-500 hover:text-brand-400 block text-center">+{guardrailAlerts.length - 2} more alerts</Link>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-4 mb-6">
         <TSSProgressBar actual={actualTSS} planned={plannedTSS} label="Weekly TSS" />
