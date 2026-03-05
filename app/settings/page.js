@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { getAthleteProfile, updateAthleteProfile } from "../../lib/db";
 import { getIntervalsProfile } from "../../lib/intervals";
+import { getCalendarEvents } from "../../lib/calendar";
 
 function ConnectionCard({ name, icon, status, description }) {
   const isConnected = status === "connected";
@@ -31,6 +32,7 @@ export default function SettingsPage() {
   const [dbStatus, setDbStatus] = useState("checking");
   const [intervalsStatus, setIntervalsStatus] = useState("checking");
   const [intervalsFitness, setIntervalsFitness] = useState(null);
+  const [calendarStatus, setCalendarStatus] = useState("checking");
 
   useEffect(() => {
     async function load() {
@@ -41,6 +43,10 @@ export default function SettingsPage() {
       const ival = await getIntervalsProfile();
       if (ival && ival.ctl !== undefined) { setIntervalsStatus("connected"); setIntervalsFitness(ival); }
       else setIntervalsStatus("error");
+
+      const calData = await getCalendarEvents();
+      if (calData?.events && calData.events.length > 0) setCalendarStatus("connected");
+      else setCalendarStatus("error");
     }
     load();
   }, []);
@@ -66,8 +72,8 @@ export default function SettingsPage() {
           <ConnectionCard name="Strava" icon="🟧" status="pending" description="Activity data, GPS routes, social" />
           <ConnectionCard name="Apple Watch" icon="⌚" status="pending" description="HR, HRV, sleep, via Intervals.icu" />
           <ConnectionCard name="Smart Scale" icon="⚖️" status="pending" description="Weight, body fat, via Intervals.icu" />
-          <ConnectionCard name="Google Calendar" icon="📅" status="pending" description="Work events, meetings, travel" />
-          <ConnectionCard name="Groq (Llama 3.3)" icon="🤖" status="connected" description="AI coach — connected and ready" />
+          <ConnectionCard name="Google Calendar" icon="📅" status={calendarStatus === "connected" ? "connected" : "pending"} description={calendarStatus === "connected" ? "Calendar connected — work events syncing" : "Add GOOGLE_CALENDAR_ICAL_URL to .env.local"} />
+          <ConnectionCard name="Gemini API" icon="🤖" status="pending" description="AI — fast analysis, daily recommendations" />
         </div>
       </div>
 
