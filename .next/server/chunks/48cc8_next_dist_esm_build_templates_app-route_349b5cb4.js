@@ -1,0 +1,65 @@
+module.exports=[22647,e=>{"use strict";var t=e.i(39776),a=e.i(76160),n=e.i(74151),r=e.i(13610),i=e.i(27644),o=e.i(15766),s=e.i(18404),l=e.i(68924),c=e.i(9942),d=e.i(77753),u=e.i(45771),p=e.i(31838),h=e.i(89953),m=e.i(17045),g=e.i(21874),R=e.i(93695);e.i(86257);var v=e.i(87875),f=e.i(69817);let w=process.env.GROQ_API_KEY,E=process.env.INTERVALS_API_KEY,_=process.env.INTERVALS_ATHLETE_ID;async function y(){if(!E||!_)return null;try{let e=Buffer.from(`API_KEY:${E}`).toString("base64"),t=new Date().toISOString().split("T")[0],a=new Date(Date.now()-5184e6).toISOString().split("T")[0],[n,r]=await Promise.all([fetch(`https://intervals.icu/api/v1/athlete/${_}/wellness?oldest=${a}&newest=${t}`,{headers:{Authorization:`Basic ${e}`,Accept:"application/json"}}),fetch(`https://intervals.icu/api/v1/athlete/${_}/activities?oldest=${a}&newest=${t}`,{headers:{Authorization:`Basic ${e}`,Accept:"application/json"}})]),i=n.ok?await n.json():[],o=r.ok?await r.json():[],s=i.length>0?i[i.length-1]:{},l=o.filter(e=>"Run"===e.type&&e.moving_time&&e.distance).map(e=>({date:e.start_date_local?.split("T")[0],name:e.name,distance_km:(e.distance/1e3).toFixed(1),duration_min:Math.round(e.moving_time/60),pace_sec_per_km:e.moving_time/(e.distance/1e3),avg_hr:e.average_heartrate,tss:e.icu_training_load})).slice(-10),c=o.filter(e=>("Ride"===e.type||"VirtualRide"===e.type)&&e.moving_time).map(e=>({date:e.start_date_local?.split("T")[0],name:e.name,distance_km:e.distance?(e.distance/1e3).toFixed(1):null,duration_min:Math.round(e.moving_time/60),avg_power:e.icu_weighted_avg_watts,normalized_power:e.icu_np,avg_hr:e.average_heartrate,elevation:e.total_elevation_gain,tss:e.icu_training_load})).slice(-10);return{ctl:s.ctl,atl:s.atl,tsb:s.ctl&&s.atl?s.ctl-s.atl:null,weight:s.weight,resting_hr:s.restingHR,hrv:s.hrv,recentRuns:l,recentRides:c}}catch(e){return console.error("Error fetching fitness:",e),null}}function $(e){let t=Math.floor(e/60),a=Math.round(e%60);return`${t}:${a.toString().padStart(2,"0")}`}function T(e){let t=Math.floor(e/3600),a=Math.floor(e%3600/60),n=Math.round(e%60);return t>0?`${t}:${a.toString().padStart(2,"0")}:${n.toString().padStart(2,"0")}`:`${a}:${n.toString().padStart(2,"0")}`}async function A(e){if(!w)return f.NextResponse.json({error:"Groq API key not configured"},{status:500});try{let{race:t,planType:a}=await e.json(),n=await y(),r=function(e,t){let a="road_run"===e.type||"trail"===e.type,n="cycling"===e.type;if(a){let t,a=e.distance;t=a<=10?1:a<=15?1.03:a<=21.1?1.06:1.12;let n=5*(e.elevation/a),r="trail"===e.type?1.12:1,i=328*t*r+n,o=317.5*t*r+n,s=307*t*r+n;return{conservative:{pace:$(i),total:T(i*a),paceSeconds:i},target:{pace:$(o),total:T(o*a),paceSeconds:o},optimistic:{pace:$(s),total:T(s*a),paceSeconds:s}}}if(n){let a=t?.weight||76.2,n=e.elevation,r=e.distance,i=Math.max(0,r-n/50)/28,o=n/(181/a*350)+i;return{conservative:{total:T(3600*o*1.1)},target:{total:T(3600*o)},optimistic:{total:T(3600*o*.9)}}}return null}(t,n),i="road_run"===t.type||"trail"===t.type,o="cycling"===t.type,s=`You are an expert endurance coach generating a race plan. You MUST use the calculated predictions provided below — do NOT invent your own finish time estimates.
+
+ATHLETE:
+- Alexandre Santos, 29 years old, 76.2kg
+- LACTATE THRESHOLD PACE: 5:07-5:28/km (this is his THRESHOLD, NOT his easy or race pace)
+- FTP: 181W (2.4 W/kg) | Max HR: 188 | Resting HR: 59
+- Right knee ACL surgery ~2 years ago
+- Uses Nduranz products (gels, drink mix, electrolytes)
+
+CURRENT FITNESS:
+- CTL: ${n?.ctl?Math.round(n.ctl):"~37"} | ATL: ${n?.atl?Math.round(n.atl):"~37"} | TSB: ${n?.tsb?Math.round(n.tsb):"~0"}
+- Weight: ${n?.weight||76.2}kg | Resting HR: ${n?.resting_hr||59} | HRV: ${n?.hrv||"unknown"}
+
+${i&&n?.recentRuns?.length>0?`RECENT RUNS:
+${n.recentRuns.map(e=>`- ${e.date}: ${e.name||"Run"} ${e.distance_km}km in ${e.duration_min}min (${$(e.pace_sec_per_km)}/km) HR:${e.avg_hr||"?"}`).join("\n")}`:""}
+
+${o&&n?.recentRides?.length>0?`RECENT RIDES:
+${n.recentRides.map(e=>`- ${e.date}: ${e.name||"Ride"} ${e.distance_km||"?"}km in ${e.duration_min}min NP:${e.normalized_power||"?"}W HR:${e.avg_hr||"?"}`).join("\n")}`:""}
+
+RACE:
+- ${t.name} | ${t.date} | ${t.distance}km | ${t.elevation}m D+
+- Type: ${"road_run"===t.type?"Road (flat)":"trail"===t.type?"Trail (technical)":"Mountain cycling"}
+- Priority: ${t.priority}-Race | Location: ${t.location}
+
+CALCULATED PREDICTIONS (use these exact numbers):
+${r?`- Conservative: ${r.conservative.total}${r.conservative.pace?` @ ${r.conservative.pace}/km`:""}
+- Target: ${r.target.total}${r.target.pace?` @ ${r.target.pace}/km`:""}
+- Optimistic: ${r.optimistic.total}${r.optimistic.pace?` @ ${r.optimistic.pace}/km`:""}`:"No prediction available"}
+
+IMPORTANT RULES:
+- His threshold is 5:07-5:28/km. Half marathon pace should be SLOWER than threshold (around 5:25-5:50/km depending on fitness).
+- DO NOT predict a finish time faster than the "optimistic" calculation above.
+- For HR zones: easy Z2 = 130-150, tempo Z3 = 150-165, threshold Z4 = 165-178, VO2max Z5 = 178-188
+- Race pace HR for a half marathon should be ~155-170bpm (Z3-low Z4), NOT at threshold HR.
+
+${"pacing"===a?`Generate a PACING STRATEGY:
+1. Predicted finish time range (use the calculated predictions above)
+2. Split pacing every 5km with target pace and HR
+3. Where to push and where to hold back based on elevation
+4. Negative split recommendation if applicable
+5. Warning signs (HR drift beyond 175, pace dropping >15s/km)
+6. Last 3km strategy`:""}
+
+${"fuelling"===a?`Generate a RACE-DAY FUELLING TIMELINE using Nduranz products:
+1. Night before: dinner composition
+2. Race morning: meal timing and content
+3. Pre-race (60-30min before): Nrgy Unit Drink details
+4. During race: gel schedule every ~30 min with exact km markers
+5. Hydration: when and how much at each aid station
+6. Post-race: recovery nutrition
+Specify exact Nduranz products and quantities.`:""}
+
+${"full"===a?`Generate a COMPLETE RACE PLAN:
+1. Predicted finish time (use calculated predictions above)
+2. Pacing strategy with 5km splits, pace, and HR targets
+3. Fuelling timeline using Nduranz (pre/during/post with exact products)
+4. Race week: final week taper guidance
+5. Race day schedule from wake-up to finish
+6. ACL warm-up: specific knee-friendly dynamic stretches (10 min)
+7. Mental checkpoints: what to think about at 5km, 10km, 15km, 19km
+8. What to do if things go wrong (too fast start, GI issues, knee pain)`:""}
+
+Be specific with numbers. Format with clear sections using headers.`,l=await fetch("https://api.groq.com/openai/v1/chat/completions",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${w}`},body:JSON.stringify({model:"llama-3.3-70b-versatile",messages:[{role:"user",content:s}],temperature:.5,max_tokens:2048})});if(!l.ok){let e=await l.text();return console.error("Groq error:",l.status,e),f.NextResponse.json({error:"AI error"},{status:502})}let c=await l.json(),d=c.choices?.[0]?.message?.content||"Could not generate plan.";return f.NextResponse.json({plan:d,prediction:r,fitness:n})}catch(e){return console.error("Race plan error:",e),f.NextResponse.json({error:"Internal error"},{status:500})}}e.s(["POST",()=>A],3034);var k=e.i(3034);let S=new t.AppRouteRouteModule({definition:{kind:a.RouteKind.APP_ROUTE,page:"/api/race-plan/route",pathname:"/api/race-plan",filename:"route",bundlePath:""},distDir:".next",relativeProjectDir:"",resolvedPagePath:"[project]/app/api/race-plan/route.js",nextConfigOutput:"",userland:k}),{workAsyncStorage:C,workUnitAsyncStorage:N,serverHooks:x}=S;function b(){return(0,n.patchFetch)({workAsyncStorage:C,workUnitAsyncStorage:N})}async function P(e,t,n){S.isDev&&(0,r.addRequestMeta)(e,"devRequestTimingInternalsEnd",process.hrtime.bigint());let f="/api/race-plan/route";f=f.replace(/\/index$/,"")||"/";let w=await S.prepare(e,t,{srcPage:f,multiZoneDraftMode:!1});if(!w)return t.statusCode=400,t.end("Bad Request"),null==n.waitUntil||n.waitUntil.call(n,Promise.resolve()),null;let{buildId:E,params:_,nextConfig:y,parsedUrl:$,isDraftMode:T,prerenderManifest:A,routerServerContext:k,isOnDemandRevalidate:C,revalidateOnlyGenerated:N,resolvedPathname:x,clientReferenceManifest:b,serverActionsManifest:P}=w,O=(0,s.normalizeAppPath)(f),H=!!(A.dynamicRoutes[O]||A.routes[x]),I=async()=>((null==k?void 0:k.render404)?await k.render404(e,t,$,!1):t.end("This page could not be found"),null);if(H&&!T){let e=!!A.routes[x],t=A.dynamicRoutes[O];if(t&&!1===t.fallback&&!e){if(y.experimental.adapterPath)return await I();throw new R.NoFallbackError}}let M=null;!H||S.isDev||T||(M="/index"===(M=x)?"/":M);let D=!0===S.isDev||!H,L=H&&!D;P&&b&&(0,o.setManifestsSingleton)({page:f,clientReferenceManifest:b,serverActionsManifest:P});let U=e.method||"GET",j=(0,i.getTracer)(),q=j.getActiveScopeSpan(),F={params:_,prerenderManifest:A,renderOpts:{experimental:{authInterrupts:!!y.experimental.authInterrupts},cacheComponents:!!y.cacheComponents,supportsDynamicResponse:D,incrementalCache:(0,r.getRequestMeta)(e,"incrementalCache"),cacheLifeProfiles:y.cacheLife,waitUntil:n.waitUntil,onClose:e=>{t.on("close",e)},onAfterTaskError:void 0,onInstrumentationRequestError:(t,a,n,r)=>S.onRequestError(e,t,n,r,k)},sharedContext:{buildId:E}},G=new l.NodeNextRequest(e),z=new l.NodeNextResponse(t),B=c.NextRequestAdapter.fromNodeNextRequest(G,(0,c.signalFromNodeResponse)(t));try{let o=async e=>S.handle(B,F).finally(()=>{if(!e)return;e.setAttributes({"http.status_code":t.statusCode,"next.rsc":!1});let a=j.getRootSpanAttributes();if(!a)return;if(a.get("next.span_type")!==d.BaseServerSpan.handleRequest)return void console.warn(`Unexpected root span type '${a.get("next.span_type")}'. Please report this Next.js issue https://github.com/vercel/next.js`);let n=a.get("next.route");if(n){let t=`${U} ${n}`;e.setAttributes({"next.route":n,"http.route":n,"next.span_name":t}),e.updateName(t)}else e.updateName(`${U} ${f}`)}),s=!!(0,r.getRequestMeta)(e,"minimalMode"),l=async r=>{var i,l;let c=async({previousCacheEntry:a})=>{try{if(!s&&C&&N&&!a)return t.statusCode=404,t.setHeader("x-nextjs-cache","REVALIDATED"),t.end("This page could not be found"),null;let i=await o(r);e.fetchMetrics=F.renderOpts.fetchMetrics;let l=F.renderOpts.pendingWaitUntil;l&&n.waitUntil&&(n.waitUntil(l),l=void 0);let c=F.renderOpts.collectedTags;if(!H)return await (0,p.sendResponse)(G,z,i,F.renderOpts.pendingWaitUntil),null;{let e=await i.blob(),t=(0,h.toNodeOutgoingHttpHeaders)(i.headers);c&&(t[g.NEXT_CACHE_TAGS_HEADER]=c),!t["content-type"]&&e.type&&(t["content-type"]=e.type);let a=void 0!==F.renderOpts.collectedRevalidate&&!(F.renderOpts.collectedRevalidate>=g.INFINITE_CACHE)&&F.renderOpts.collectedRevalidate,n=void 0===F.renderOpts.collectedExpire||F.renderOpts.collectedExpire>=g.INFINITE_CACHE?void 0:F.renderOpts.collectedExpire;return{value:{kind:v.CachedRouteKind.APP_ROUTE,status:i.status,body:Buffer.from(await e.arrayBuffer()),headers:t},cacheControl:{revalidate:a,expire:n}}}}catch(t){throw(null==a?void 0:a.isStale)&&await S.onRequestError(e,t,{routerKind:"App Router",routePath:f,routeType:"route",revalidateReason:(0,u.getRevalidateReason)({isStaticGeneration:L,isOnDemandRevalidate:C})},!1,k),t}},d=await S.handleResponse({req:e,nextConfig:y,cacheKey:M,routeKind:a.RouteKind.APP_ROUTE,isFallback:!1,prerenderManifest:A,isRoutePPREnabled:!1,isOnDemandRevalidate:C,revalidateOnlyGenerated:N,responseGenerator:c,waitUntil:n.waitUntil,isMinimalMode:s});if(!H)return null;if((null==d||null==(i=d.value)?void 0:i.kind)!==v.CachedRouteKind.APP_ROUTE)throw Object.defineProperty(Error(`Invariant: app-route received invalid cache entry ${null==d||null==(l=d.value)?void 0:l.kind}`),"__NEXT_ERROR_CODE",{value:"E701",enumerable:!1,configurable:!0});s||t.setHeader("x-nextjs-cache",C?"REVALIDATED":d.isMiss?"MISS":d.isStale?"STALE":"HIT"),T&&t.setHeader("Cache-Control","private, no-cache, no-store, max-age=0, must-revalidate");let R=(0,h.fromNodeOutgoingHttpHeaders)(d.value.headers);return s&&H||R.delete(g.NEXT_CACHE_TAGS_HEADER),!d.cacheControl||t.getHeader("Cache-Control")||R.get("Cache-Control")||R.set("Cache-Control",(0,m.getCacheControlHeader)(d.cacheControl)),await (0,p.sendResponse)(G,z,new Response(d.value.body,{headers:R,status:d.value.status||200})),null};q?await l(q):await j.withPropagatedContext(e.headers,()=>j.trace(d.BaseServerSpan.handleRequest,{spanName:`${U} ${f}`,kind:i.SpanKind.SERVER,attributes:{"http.method":U,"http.target":e.url}},l))}catch(t){if(t instanceof R.NoFallbackError||await S.onRequestError(e,t,{routerKind:"App Router",routePath:O,routeType:"route",revalidateReason:(0,u.getRevalidateReason)({isStaticGeneration:L,isOnDemandRevalidate:C})},!1,k),H)throw t;return await (0,p.sendResponse)(G,z,new Response(null,{status:500})),null}}e.s(["handler",()=>P,"patchFetch",()=>b,"routeModule",()=>S,"serverHooks",()=>x,"workAsyncStorage",()=>C,"workUnitAsyncStorage",()=>N],22647)}];
+
+//# sourceMappingURL=48cc8_next_dist_esm_build_templates_app-route_349b5cb4.js.map

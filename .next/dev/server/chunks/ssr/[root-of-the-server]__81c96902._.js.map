@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 14, "column": 0}, "map": {"version":3,"sources":["file:///workspaces/command-center/app/page.js"],"sourcesContent":["import { redirect } from \"next/navigation\";\nexport default function Home() {\n  redirect(\"/dashboard\");\n}\n"],"names":[],"mappings":";;;;AAAA;AAAA;;AACe,SAAS;IACtB,IAAA,gUAAQ,EAAC;AACX"}}]
+}

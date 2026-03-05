@@ -1,0 +1,16 @@
+{
+  "/api/briefing/route": "app/api/briefing/route.js",
+  "/api/calendar/route": "app/api/calendar/route.js",
+  "/api/gpx/route": "app/api/gpx/route.js",
+  "/api/intervals/route": "app/api/intervals/route.js",
+  "/dashboard/page": "app/dashboard/page.js",
+  "/fuelling/page": "app/fuelling/page.js",
+  "/load/page": "app/load/page.js",
+  "/page": "app/page.js",
+  "/planner/page": "app/planner/page.js",
+  "/power/page": "app/power/page.js",
+  "/race/[id]/page": "app/race/[id]/page.js",
+  "/races/page": "app/races/page.js",
+  "/running/page": "app/running/page.js",
+  "/settings/page": "app/settings/page.js"
+}

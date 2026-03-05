@@ -1,0 +1,19 @@
+{
+  "/_global-error/page": "/_global-error",
+  "/_not-found/page": "/_not-found",
+  "/api/briefing/route": "/api/briefing",
+  "/api/calendar/route": "/api/calendar",
+  "/api/chat/route": "/api/chat",
+  "/api/intervals/route": "/api/intervals",
+  "/api/race-plan/route": "/api/race-plan",
+  "/briefing/page": "/briefing",
+  "/chat/page": "/chat",
+  "/dashboard/page": "/dashboard",
+  "/fuelling/page": "/fuelling",
+  "/load/page": "/load",
+  "/page": "/",
+  "/planner/page": "/planner",
+  "/race/[id]/page": "/race/[id]",
+  "/races/page": "/races",
+  "/settings/page": "/settings"
+}
