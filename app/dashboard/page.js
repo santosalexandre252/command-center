@@ -483,32 +483,14 @@ export default function DashboardPage() {
     }
   };
 
-  if (loading) return <div className="p-6 flex items-center justify-center h-64"><div className="text-gray-500 text-sm">Loading dashboard...</div></div>;
-
+  // Compute burnout + guardrails (must be before early returns to satisfy React hook rules)
   const ctl = fitness?.ctl || athlete?.ctl || 42;
   const atl = fitness?.atl || athlete?.atl || 38;
   const tsb = fitness?.tsb ?? (ctl - atl);
-  const weight = fitness?.weight || athlete?.weight || 76.2;
-
-  const weekStart = new Date(getWeekStart());
-  const today = new Date().toISOString().split("T")[0];
-  const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  const weekDays = dayLabels.map((label, i) => {
-    const d = new Date(weekStart);
-    d.setDate(d.getDate() + i);
-    const dateStr = d.toISOString().split("T")[0];
-    return { label, date: dateStr, activities: activities.filter((a) => a.date === dateStr), isToday: dateStr === today };
-  });
-
-  const actualTSS = activities.filter((a) => a.completed).reduce((sum, a) => sum + (a.tss || 0), 0);
-  const plannedTSS = planned.reduce((sum, p) => sum + (p.load_target || 0), 0);
-  const actualDuration = activities.filter((a) => a.completed).reduce((sum, a) => sum + (a.moving_time ? a.moving_time / 60 : 0), 0);
-  const plannedDuration = planned.reduce((sum, p) => sum + (p.duration ? p.duration / 60 : 0), 0);
 
   const energyValues = Object.values(energyLogs).filter((l) => l.energy).map((l) => l.energy);
   const avgEnergy = energyValues.length > 0 ? (energyValues.reduce((a, b) => a + b, 0) / energyValues.length).toFixed(1) : null;
 
-  // Compute burnout with shared guardrails engine
   const workStress = calculateWorkStress(calendarData);
   const hrvValues = wellnessData.filter((w) => w.hrv).map((w) => w.hrv);
   const avg30HRV = hrvValues.length > 0 ? hrvValues.reduce((s, v) => s + v, 0) / hrvValues.length : null;
@@ -529,6 +511,29 @@ export default function DashboardPage() {
     calendarConnected,
   });
   const burnoutTotal = burnout.total;
+
+  // Run guardrails on load
+  useEffect(() => {
+    if (loading) return;
+    const todayDate = new Date().toISOString().split("T")[0];
+    const todayDensity = calendarData[todayDate]?.density || "rest";
+    const todayPlannedItems = activities.filter((a) => a.date === todayDate && a.planned);
+    const todayPlanned = todayPlannedItems.length > 0 ? todayPlannedItems[0] : null;
+    const todayEnergyLog = energyLogs[todayDate];
+
+    const alerts = runGuardrails({
+      atl, ctl, tsb,
+      hrvLast3,
+      avg30HRV,
+      recentSleep,
+      todayWorkDensity: todayDensity,
+      kneeStatus: todayEnergyLog?.knee_status || 0,
+      todayPlanned,
+      energyLog: todayEnergyLog,
+      burnoutTotal,
+    });
+    setGuardrailAlerts(alerts);
+  }, [loading, activities, calendarData, energyLogs, wellnessData]);
 
   return (
     <div className="p-6 max-w-[1400px]">
