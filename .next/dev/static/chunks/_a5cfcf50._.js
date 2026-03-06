@@ -16,6 +16,12 @@ var _s = __turbopack_context__.k.signature();
 ;
 const navItems = [
     {
+        href: "/briefing",
+        label: "Briefing",
+        icon: "☀️",
+        desc: "Morning decision"
+    },
+    {
         href: "/dashboard",
         label: "Dashboard",
         icon: "📊",
@@ -28,10 +34,28 @@ const navItems = [
         desc: "Burnout prevention"
     },
     {
+        href: "/power",
+        label: "Power Analytics",
+        icon: "⚡",
+        desc: "FTP & curves"
+    },
+    {
+        href: "/running",
+        label: "Running",
+        icon: "🏃",
+        desc: "PB & metrics"
+    },
+    {
         href: "/races",
         label: "Races",
         icon: "🏁",
         desc: "Race hub"
+    },
+    {
+        href: "/plans",
+        label: "Training Plans",
+        icon: "🎯",
+        desc: "AI plans"
     },
     {
         href: "/fuelling",
@@ -72,7 +96,7 @@ function Sidebar() {
                         children: "⚡ Command Center"
                     }, void 0, false, {
                         fileName: "[project]/components/layout/Sidebar.jsx",
-                        lineNumber: 22,
+                        lineNumber: 26,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f2e$pnpm$2f$next$40$16$2e$1$2e$6_react$2d$dom$40$18$2e$3$2e$1_react$40$18$2e$3$2e$1_$5f$react$40$18$2e$3$2e$1$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -80,13 +104,13 @@ function Sidebar() {
                         children: "Alexandre Santos"
                     }, void 0, false, {
                         fileName: "[project]/components/layout/Sidebar.jsx",
-                        lineNumber: 25,
+                        lineNumber: 29,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/layout/Sidebar.jsx",
-                lineNumber: 21,
+                lineNumber: 25,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f2e$pnpm$2f$next$40$16$2e$1$2e$6_react$2d$dom$40$18$2e$3$2e$1_react$40$18$2e$3$2e$1_$5f$react$40$18$2e$3$2e$1$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("nav", {
@@ -102,7 +126,7 @@ function Sidebar() {
                                 children: item.icon
                             }, void 0, false, {
                                 fileName: "[project]/components/layout/Sidebar.jsx",
-                                lineNumber: 42,
+                                lineNumber: 46,
                                 columnNumber: 15
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f2e$pnpm$2f$next$40$16$2e$1$2e$6_react$2d$dom$40$18$2e$3$2e$1_react$40$18$2e$3$2e$1_$5f$react$40$18$2e$3$2e$1$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -112,7 +136,7 @@ function Sidebar() {
                                         children: item.label
                                     }, void 0, false, {
                                         fileName: "[project]/components/layout/Sidebar.jsx",
-                                        lineNumber: 44,
+                                        lineNumber: 48,
                                         columnNumber: 17
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f2e$pnpm$2f$next$40$16$2e$1$2e$6_react$2d$dom$40$18$2e$3$2e$1_react$40$18$2e$3$2e$1_$5f$react$40$18$2e$3$2e$1$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -120,25 +144,25 @@ function Sidebar() {
                                         children: item.desc
                                     }, void 0, false, {
                                         fileName: "[project]/components/layout/Sidebar.jsx",
-                                        lineNumber: 45,
+                                        lineNumber: 49,
                                         columnNumber: 17
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/components/layout/Sidebar.jsx",
-                                lineNumber: 43,
+                                lineNumber: 47,
                                 columnNumber: 15
                             }, this)
                         ]
                     }, item.href, true, {
                         fileName: "[project]/components/layout/Sidebar.jsx",
-                        lineNumber: 33,
+                        lineNumber: 37,
                         columnNumber: 13
                     }, this);
                 })
             }, void 0, false, {
                 fileName: "[project]/components/layout/Sidebar.jsx",
-                lineNumber: 29,
+                lineNumber: 33,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f2e$pnpm$2f$next$40$16$2e$1$2e$6_react$2d$dom$40$18$2e$3$2e$1_react$40$18$2e$3$2e$1_$5f$react$40$18$2e$3$2e$1$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -147,34 +171,34 @@ function Sidebar() {
                     className: "flex items-center justify-between text-xs text-gray-500",
                     children: [
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f2e$pnpm$2f$next$40$16$2e$1$2e$6_react$2d$dom$40$18$2e$3$2e$1_react$40$18$2e$3$2e$1_$5f$react$40$18$2e$3$2e$1$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                            children: "Phase 1 — Mock Data"
+                            children: "Build 5 — Live Data"
                         }, void 0, false, {
                             fileName: "[project]/components/layout/Sidebar.jsx",
-                            lineNumber: 55,
+                            lineNumber: 59,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f2e$pnpm$2f$next$40$16$2e$1$2e$6_react$2d$dom$40$18$2e$3$2e$1_react$40$18$2e$3$2e$1_$5f$react$40$18$2e$3$2e$1$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                             className: "w-2 h-2 rounded-full bg-emerald-500"
                         }, void 0, false, {
                             fileName: "[project]/components/layout/Sidebar.jsx",
-                            lineNumber: 56,
+                            lineNumber: 60,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/components/layout/Sidebar.jsx",
-                    lineNumber: 54,
+                    lineNumber: 58,
                     columnNumber: 9
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/components/layout/Sidebar.jsx",
-                lineNumber: 53,
+                lineNumber: 57,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/components/layout/Sidebar.jsx",
-        lineNumber: 19,
+        lineNumber: 23,
         columnNumber: 5
     }, this);
 }
