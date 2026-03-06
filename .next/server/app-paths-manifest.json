@@ -1,11 +1,15 @@
 {
   "/_global-error/page": "app/_global-error/page.js",
   "/_not-found/page": "app/_not-found/page.js",
+  "/api/analysis/route": "app/api/analysis/route.js",
   "/api/briefing/route": "app/api/briefing/route.js",
   "/api/calendar/route": "app/api/calendar/route.js",
   "/api/chat/route": "app/api/chat/route.js",
+  "/api/forecast/route": "app/api/forecast/route.js",
+  "/api/gpx/route": "app/api/gpx/route.js",
   "/api/intervals/route": "app/api/intervals/route.js",
   "/api/race-plan/route": "app/api/race-plan/route.js",
+  "/api/training-plan/route": "app/api/training-plan/route.js",
   "/briefing/page": "app/briefing/page.js",
   "/chat/page": "app/chat/page.js",
   "/dashboard/page": "app/dashboard/page.js",
@@ -13,7 +17,10 @@
   "/load/page": "app/load/page.js",
   "/page": "app/page.js",
   "/planner/page": "app/planner/page.js",
+  "/plans/page": "app/plans/page.js",
+  "/power/page": "app/power/page.js",
   "/race/[id]/page": "app/race/[id]/page.js",
   "/races/page": "app/races/page.js",
+  "/running/page": "app/running/page.js",
   "/settings/page": "app/settings/page.js"
 }
