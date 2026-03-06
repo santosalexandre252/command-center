@@ -5,14 +5,15 @@ import { getIntervalsAllWellness } from "../../lib/intervals";
 import { getAthleteProfile, getEnergyLogsRange } from "../../lib/db";
 import { getCalendarEvents } from "../../lib/calendar";
 import { getBurnoutColor, getBurnoutBg } from "../../lib/utils";
+import { calculateBurnoutSignals, calculateWorkStress } from "../../lib/guardrails";
 
 function ChartTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-surface-900 border border-white/10 rounded-lg px-3 py-2 text-xs shadow-lg">
       <div className="text-gray-400 mb-1">{label}</div>
-      {payload.map((p) => (
-        <div key={p.dataKey} className="flex items-center gap-2">
+      {payload.map((p, i) => (
+        <div key={`${p.dataKey}-${i}`} className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }}></span>
           <span className="text-gray-300">{p.name}:</span>
           <span className="font-medium text-white">{p.value !== null && p.value !== undefined ? (typeof p.value === "number" ? Math.round(p.value * 10) / 10 : p.value) : "—"}</span>
@@ -181,17 +182,23 @@ export default function LoadPage() {
   const avg7HRV = last7HRV.length > 0 ? Math.round(last7HRV.reduce((s, d) => s + d.hrv, 0) / last7HRV.length) : null;
   const hrvTrend = avgHRV && avg7HRV ? (avg7HRV > avgHRV ? "improving" : avg7HRV < avgHRV * 0.9 ? "declining" : "stable") : null;
 
-  // Burnout from real data
-  const burnoutTraining = atl ? Math.round(Math.min(100, (atl / 80) * 100)) : 40;
-  const burnoutTSB = tsb !== null ? Math.round(Math.max(0, Math.min(100, 50 - tsb * 3))) : 40;
-  const burnoutHRV = avgHRV && avg7HRV ? Math.round(Math.max(0, Math.min(100, 70 - (avg7HRV - avgHRV)))) : 40;
-  const burnoutSleep = avgSleep ? Math.round(Math.max(0, Math.min(100, avgSleep < 7 ? 80 : avgSleep < 7.5 ? 55 : avgSleep < 8 ? 35 : 20))) : 40;
-  const heavyWorkDays = Object.values(calendarData).filter((d) => d.density === "heavy" || d.density === "travel").length;
-  const totalMeetings = Object.values(calendarData).reduce((s, d) => s + d.count, 0);
-  const burnoutWork = calendarConnected ? Math.round(Math.min(100, heavyWorkDays * 20 + totalMeetings * 5)) : 40;
-  const burnoutEnergy = avgEnergy ? Math.round(Math.max(0, Math.min(100, (5 - avgEnergy) * 25))) : 40;
-  const burnoutTotal = Math.round(burnoutTraining * 0.25 + burnoutTSB * 0.15 + burnoutHRV * 0.15 + burnoutSleep * 0.15 + burnoutWork * 0.15 + burnoutEnergy * 0.15);
-  const burnoutLevel = burnoutTotal < 40 ? "LOW" : burnoutTotal < 55 ? "MODERATE" : burnoutTotal < 75 ? "HIGH" : "CRITICAL";
+  // Burnout from shared guardrails engine
+  const workStress = calculateWorkStress(calendarData);
+  const burnout = calculateBurnoutSignals({
+    atl, ctl, tsb,
+    avg7HRV, avg30HRV: avgHRV,
+    avgSleep,
+    workStress,
+    avgEnergy: avgEnergy ? parseFloat(avgEnergy) : null,
+    calendarConnected,
+  });
+  const { total: burnoutTotal, level: burnoutLevel, signals: burnoutSignals } = burnout;
+  const burnoutTraining = burnoutSignals.training;
+  const burnoutTSB = burnoutSignals.form;
+  const burnoutHRV = burnoutSignals.hrv;
+  const burnoutSleep = burnoutSignals.sleep;
+  const burnoutWork = burnoutSignals.work;
+  const burnoutEnergy = burnoutSignals.energy;
 
   const tickInterval = chartData.length > 200 ? Math.floor(chartData.length / 10) : chartData.length > 60 ? Math.floor(chartData.length / 8) : Math.max(1, Math.floor(chartData.length / 6));
 
@@ -246,7 +253,7 @@ export default function LoadPage() {
               <YAxis tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} />
               <Tooltip content={<ChartTooltip />} />
               <ReferenceLine y={0} stroke="#374151" strokeDasharray="3 3" />
-              <Area type="monotone" dataKey="TSB" name="Form (TSB)" fill="#22c55e" fillOpacity={0.08} stroke="none" />
+              <Area type="monotone" dataKey="TSB" fill="#22c55e" fillOpacity={0.08} stroke="none" />
               <Line type="monotone" dataKey="CTL" name="Fitness (CTL)" stroke="#3b82f6" strokeWidth={2} dot={false} />
               <Line type="monotone" dataKey="ATL" name="Fatigue (ATL)" stroke="#ec4899" strokeWidth={2} dot={false} />
               <Line type="monotone" dataKey="TSB" name="Form (TSB)" stroke="#22c55e" strokeWidth={1.5} strokeDasharray="4 4" dot={false} />

@@ -3,9 +3,13 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 
 const navItems = [
+  { href: "/briefing", label: "Briefing", icon: "☀️", desc: "Morning decision" },
   { href: "/dashboard", label: "Dashboard", icon: "📊", desc: "Weekly HQ" },
   { href: "/load", label: "Load Monitor", icon: "💓", desc: "Burnout prevention" },
+  { href: "/power", label: "Power Analytics", icon: "⚡", desc: "FTP & curves" },
+  { href: "/running", label: "Running", icon: "🏃", desc: "PB & metrics" },
   { href: "/races", label: "Races", icon: "🏁", desc: "Race hub" },
+  { href: "/plans", label: "Training Plans", icon: "🎯", desc: "AI plans" },
   { href: "/fuelling", label: "Fuelling", icon: "⚡", desc: "Nutrition" },
   { href: "/planner", label: "Planner", icon: "📅", desc: "Monthly view" },
   { href: "/chat", label: "Ask AI", icon: "🤖", desc: "Coach" },
@@ -52,7 +56,7 @@ export default function Sidebar() {
       {/* Theme toggle + status */}
       <div className="p-4 border-t border-white/5">
         <div className="flex items-center justify-between text-xs text-gray-500">
-          <span>Phase 1 — Mock Data</span>
+          <span>Build 5 — Live Data</span>
           <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
         </div>
       </div>

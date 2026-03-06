@@ -4,6 +4,9 @@ import { getAthleteProfile, getRaces, upsertEnergyLog, getEnergyLogsRange } from
 import { getIntervalsProfile, getIntervalsActivities, getIntervalsPlannedWorkouts, getWeekStart, getWeekEnd } from "../../lib/intervals";
 import { getCalendarEvents } from "../../lib/calendar";
 import { daysUntil, getBurnoutColor, getBurnoutBg, getRaceTypeIcon, getWorkDensityColor } from "../../lib/utils";
+import { calculateBurnoutSignals, calculateWorkStress, runGuardrails } from "../../lib/guardrails";
+import { getIntervalsWellness } from "../../lib/intervals";
+import Link from "next/link";
 
 function EnergyStars({ value, onChange, size = "text-lg" }) {
   return (
@@ -164,9 +167,9 @@ function TSSProgressBar({ actual, planned, label }) {
 
 function VolumeBreakdown({ activities, planned }) {
   const types = {};
-  activities.filter((a) => a.completed).forEach((a) => { const t = a.type || "Other"; if (!types[t]) types[t] = { actual: 0, count: 0 }; types[t].actual += a.tss || 0; types[t].count += 1; });
+  activities.filter((a) => a.completed).forEach((a) => { const t = a.type || "Other"; if (!types[t]) types[t] = { actual: 0, count: 0 }; types[t].actual += a.icu_training_load || a.tss || 0; types[t].count += 1; });
   const plannedTypes = {};
-  planned.forEach((p) => { const t = p.type || p.category || "Other"; if (!plannedTypes[t]) plannedTypes[t] = { planned: 0, count: 0 }; plannedTypes[t].planned += p.load_target || 0; plannedTypes[t].count += 1; });
+  planned.forEach((p) => { const t = p.type || p.category || "Other"; if (!plannedTypes[t]) plannedTypes[t] = { planned: 0, count: 0 }; plannedTypes[t].planned += p.load_target || p.tss || 0; plannedTypes[t].count += 1; });
   const typeIcons = { Run: "🏃", Ride: "🚴", WeightTraining: "🏋️", VirtualRide: "🚴", Swim: "🏊" };
   const allTypes = [...new Set([...Object.keys(types), ...Object.keys(plannedTypes)])];
   if (allTypes.length === 0) return null;
@@ -222,6 +225,122 @@ function WorkWeekSummary({ calendarData }) {
   );
 }
 
+function WeightForecast({ races, currentWeight, targetWeight, onLoadForecast, forecast }) {
+  const nextRace = races
+    .filter(r => new Date(r.date) > new Date())
+    .sort((a, b) => new Date(a.date) - new Date(b.date))[0];
+
+  if (!nextRace) return null;
+
+  const daysToRace = Math.ceil((new Date(nextRace.date) - new Date()) / (1000 * 60 * 60 * 24));
+  const raceTarget = nextRace.target_weight || targetWeight;
+
+  return (
+    <div className="bg-surface-850 border border-white/5 rounded-xl p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-medium text-gray-300">Weight Forecast</h3>
+        <button
+          onClick={() => onLoadForecast(nextRace.id)}
+          className="text-[10px] px-2 py-1 rounded bg-brand-600/20 text-brand-400 hover:bg-brand-600/30 transition-colors"
+        >
+          {forecast ? "Refresh" : "Forecast"}
+        </button>
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-gray-400">Current</span>
+          <span className="text-sm font-medium text-white">{currentWeight}kg</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-gray-400">Target ({nextRace.short_name})</span>
+          <span className="text-sm font-medium text-emerald-400">{raceTarget}kg</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-gray-400">Days to race</span>
+          <span className="text-sm font-medium text-white">{daysToRace}</span>
+        </div>
+
+        {forecast && (
+          <div className="pt-3 border-t border-white/5">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-gray-400">Projected</span>
+              <span className={`text-sm font-medium ${forecast.willMeetTarget ? "text-emerald-400" : "text-amber-400"}`}>
+                {forecast.projectedWeight}kg
+              </span>
+            </div>
+            <div className="text-[10px] text-gray-500 mb-2">
+              Trend: {forecast.currentTrend.direction} {forecast.currentTrend.rate > 0 && `(${forecast.currentTrend.rate.toFixed(1)}kg/week)`}
+            </div>
+            {forecast.recommendations?.slice(0, 1).map((rec, i) => (
+              <div key={i} className={`text-xs p-2 rounded ${rec.priority === "high" ? "bg-red-500/10 text-red-400" : "bg-amber-500/10 text-amber-400"}`}>
+                {rec.action}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ActivityAnalysis({ activities, onAnalyze, analysis }) {
+  const recentActivities = activities
+    .filter(a => a.completed && a.start_date_local)
+    .sort((a, b) => new Date(b.start_date_local) - new Date(a.start_date_local))
+    .slice(0, 3);
+
+  if (recentActivities.length === 0) return null;
+
+  const typeIcons = { Run: "🏃", Ride: "🚴", WeightTraining: "🏋️", VirtualRide: "🚴", Walk: "🚶", Swim: "🏊", Hike: "⛰️" };
+
+  return (
+    <div className="bg-surface-850 border border-white/5 rounded-xl p-4">
+      <h3 className="text-sm font-medium text-gray-300 mb-3">Recent Workouts</h3>
+      <div className="space-y-3">
+        {recentActivities.map((activity) => {
+          const analysisData = analysis[activity.id];
+          const icon = typeIcons[activity.type] || "🏅";
+          const date = new Date(activity.start_date_local).toLocaleDateString();
+          const duration = activity.moving_time ? Math.round(activity.moving_time / 60) : 0;
+          const tss = activity.icu_training_load ? Math.round(activity.icu_training_load) : 0;
+
+          return (
+            <div key={activity.id} className="border border-white/5 rounded-lg p-3">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span>{icon}</span>
+                  <span className="text-sm font-medium text-gray-200 truncate">{activity.name}</span>
+                </div>
+                <span className="text-[10px] text-gray-500">{date}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex gap-3 text-[10px] text-gray-500">
+                  {duration > 0 && <span>{duration}m</span>}
+                  {tss > 0 && <span>TSS {tss}</span>}
+                  {activity.distance && <span>{(activity.distance / 1000).toFixed(1)}km</span>}
+                </div>
+                <button
+                  onClick={() => onAnalyze(activity.id)}
+                  className="text-[10px] px-2 py-1 rounded bg-brand-600/20 text-brand-400 hover:bg-brand-600/30 transition-colors"
+                  disabled={analysisData}
+                >
+                  {analysisData ? "Analyzed" : "Analyze"}
+                </button>
+              </div>
+              {analysisData && (
+                <div className="mt-3 pt-3 border-t border-white/5">
+                  <p className="text-xs text-gray-300 leading-relaxed">{analysisData.aiAnalysis}</p>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const [athlete, setAthlete] = useState(null);
   const [races, setRaces] = useState([]);
@@ -234,20 +353,27 @@ export default function DashboardPage() {
   const [intervalsConnected, setIntervalsConnected] = useState(false);
   const [calendarConnected, setCalendarConnected] = useState(false);
   const [checkInDate, setCheckInDate] = useState(null);
+  const [guardrailAlerts, setGuardrailAlerts] = useState([]);
+  const [wellnessData, setWellnessData] = useState([]);
+  const [activityAnalysis, setActivityAnalysis] = useState({});
+  const [weightForecast, setWeightForecast] = useState(null);
+  const [weekStart, setWeekStart] = useState(null);
 
   useEffect(() => {
     async function loadData() {
-      const weekStart = getWeekStart();
-      const weekEnd = getWeekEnd();
+      const ws = getWeekStart();
+      const we = getWeekEnd();
+      setWeekStart(ws);
 
-      const [profileData, racesData, fitnessData, activitiesData, plannedData, energyData, calData] = await Promise.all([
+      const [profileData, racesData, fitnessData, activitiesData, plannedData, energyData, calData, recentWellness] = await Promise.all([
         getAthleteProfile(),
         getRaces(),
         getIntervalsProfile(),
-        getIntervalsActivities(weekStart, weekEnd),
-        getIntervalsPlannedWorkouts(weekStart, weekEnd),
-        getEnergyLogsRange(weekStart, weekEnd),
-        getCalendarEvents(weekStart, weekEnd),
+        getIntervalsActivities(ws, we),
+        getIntervalsPlannedWorkouts(ws, we),
+        getEnergyLogsRange(ws, we),
+        getCalendarEvents(ws, we),
+        getIntervalsWellness(new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0], new Date().toISOString().split("T")[0]),
       ]);
 
       setAthlete(profileData);
@@ -272,6 +398,8 @@ export default function DashboardPage() {
         setCalendarConnected(true);
       }
 
+      setWellnessData(recentWellness || []);
+
       setLoading(false);
     }
     loadData();
@@ -282,38 +410,114 @@ export default function DashboardPage() {
     if (saved) setEnergyLogs((prev) => ({ ...prev, [log.date]: saved }));
   };
 
-  if (loading) return <div className="p-6 flex items-center justify-center h-64"><div className="text-gray-500 text-sm">Loading dashboard...</div></div>;
+  const handleAnalyzeActivity = async (activityId) => {
+    try {
+      const res = await fetch("/api/analysis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ activityId }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setActivityAnalysis((prev) => ({ ...prev, [activityId]: data.analysis }));
+      }
+    } catch (err) {
+      console.error("Analysis failed:", err);
+    }
+  };
 
+  const loadWeightForecast = async (raceId) => {
+    try {
+      const res = await fetch(`/api/forecast?raceId=${raceId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setWeightForecast(data);
+      }
+    } catch (err) {
+      console.error("Forecast failed:", err);
+    }
+  };
+
+  // Compute burnout + guardrails (must be before early returns to satisfy React hook rules)
   const ctl = fitness?.ctl || athlete?.ctl || 42;
   const atl = fitness?.atl || athlete?.atl || 38;
   const tsb = fitness?.tsb ?? (ctl - atl);
-  const weight = fitness?.weight || athlete?.weight || 76.2;
 
-  const weekStart = new Date(getWeekStart());
+  // Calculate weekly TSS and duration
+  const completedActivities = activities.filter((a) => a.completed);
+  const plannedActivities = activities.filter((a) => a.planned);
+  const actualTSS = completedActivities.reduce((sum, a) => sum + (a.icu_training_load || 0), 0);
+  const plannedTSS = plannedActivities.reduce((sum, a) => sum + (a.tss || 0), 0);
+  const actualDuration = completedActivities.reduce((sum, a) => sum + (a.moving_time || 0), 0) / 60; // convert to minutes
+  const plannedDuration = plannedActivities.reduce((sum, a) => sum + (a.moving_time || 0), 0) / 60; // convert to minutes
+
+  // Build week days array
   const today = new Date().toISOString().split("T")[0];
+  const ws = getWeekStart(); // returns "YYYY-MM-DD" string
+  const weekDays = [];
   const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  const weekDays = dayLabels.map((label, i) => {
-    const d = new Date(weekStart);
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(ws + "T00:00:00"); // convert string to Date with explicit time
     d.setDate(d.getDate() + i);
     const dateStr = d.toISOString().split("T")[0];
-    return { label, date: dateStr, activities: activities.filter((a) => a.date === dateStr), isToday: dateStr === today };
-  });
-
-  const actualTSS = activities.filter((a) => a.completed).reduce((sum, a) => sum + (a.tss || 0), 0);
-  const plannedTSS = planned.reduce((sum, p) => sum + (p.load_target || 0), 0);
-  const actualDuration = activities.filter((a) => a.completed).reduce((sum, a) => sum + (a.moving_time ? a.moving_time / 60 : 0), 0);
-  const plannedDuration = planned.reduce((sum, p) => sum + (p.duration ? p.duration / 60 : 0), 0);
+    const dayActivities = activities.filter((a) => a.date === dateStr);
+    weekDays.push({
+      date: dateStr,
+      label: dayLabels[i],
+      isToday: dateStr === today,
+      activities: dayActivities,
+    });
+  }
 
   const energyValues = Object.values(energyLogs).filter((l) => l.energy).map((l) => l.energy);
   const avgEnergy = energyValues.length > 0 ? (energyValues.reduce((a, b) => a + b, 0) / energyValues.length).toFixed(1) : null;
 
-  // Compute burnout with work stress
-  const heavyWorkDays = Object.values(calendarData).filter((d) => d.density === "heavy" || d.density === "travel").length;
-  const workStress = Math.min(100, heavyWorkDays * 20 + Object.values(calendarData).reduce((s, d) => s + d.count, 0) * 5);
-  const burnoutTraining = atl ? Math.round(Math.min(100, (atl / 80) * 100)) : 40;
-  const burnoutTSB = tsb !== null ? Math.round(Math.max(0, Math.min(100, 50 - tsb * 3))) : 40;
-  const burnoutWork = calendarConnected ? workStress : 40;
-  const burnoutTotal = Math.round(burnoutTraining * 0.35 + burnoutTSB * 0.25 + burnoutWork * 0.25 + (avgEnergy ? Math.max(0, (5 - avgEnergy) * 20) : 40) * 0.15);
+  const workStress = calculateWorkStress(calendarData);
+  const hrvValues = wellnessData.filter((w) => w.hrv).map((w) => w.hrv);
+  const avg30HRV = hrvValues.length > 0 ? hrvValues.reduce((s, v) => s + v, 0) / hrvValues.length : null;
+  const hrvLast3 = hrvValues.slice(-3);
+  const avg7HRV = hrvLast3.length > 0 ? hrvLast3.reduce((s, v) => s + v, 0) / hrvLast3.length : null;
+  const recentSleep = wellnessData.slice(-3).map((w) => {
+    if (!w.sleep_duration) return null;
+    return w.sleep_duration > 100 ? w.sleep_duration / 60 : w.sleep_duration;
+  });
+  const avgSleep = recentSleep.filter(Boolean).length > 0 ? recentSleep.filter(Boolean).reduce((s, v) => s + v, 0) / recentSleep.filter(Boolean).length : null;
+
+  // Get latest weight from wellness data
+  const weight = wellnessData.length > 0 && wellnessData[wellnessData.length - 1]?.weight ? wellnessData[wellnessData.length - 1].weight : athlete?.weight || 76.2;
+
+  const burnout = calculateBurnoutSignals({
+    atl, ctl, tsb,
+    avg7HRV, avg30HRV,
+    avgSleep,
+    workStress,
+    avgEnergy: avgEnergy ? parseFloat(avgEnergy) : null,
+    calendarConnected,
+  });
+  const burnoutTotal = burnout.total;
+
+  // Update guardrails when key data changes
+  useEffect(() => {
+    if (loading) return;
+    const todayDate = new Date().toISOString().split("T")[0];
+    const todayDensity = calendarData[todayDate]?.density || "rest";
+    const todayPlannedItems = activities.filter((a) => a.date === todayDate && a.planned);
+    const todayPlanned = todayPlannedItems.length > 0 ? todayPlannedItems[0] : null;
+    const todayEnergyLog = energyLogs[todayDate];
+
+    const alerts = runGuardrails({
+      atl, ctl, tsb,
+      hrvLast3,
+      avg30HRV,
+      recentSleep,
+      todayWorkDensity: todayDensity,
+      kneeStatus: todayEnergyLog?.knee_status || 0,
+      todayPlanned,
+      energyLog: todayEnergyLog,
+      burnoutTotal,
+    });
+    setGuardrailAlerts(alerts);
+  }, [loading, activities, calendarData, energyLogs, wellnessData, ctl, atl, tsb]);
 
   return (
     <div className="p-6 max-w-[1400px]">
@@ -323,7 +527,11 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-2xl font-bold text-white">Weekly Command Center</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Week of {weekStart.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} – {new Date(weekStart.getTime() + 6 * 86400000).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+            {weekStart ? (() => {
+              const start = new Date(weekStart + "T00:00:00");
+              const end = new Date(start.getTime() + 6 * 86400000);
+              return `Week of ${start.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} – ${end.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`;
+            })() : "Loading..."}
             {intervalsConnected && <span className="text-emerald-400 ml-2">● Training</span>}
             {calendarConnected && <span className="text-blue-400 ml-2">● Calendar</span>}
           </p>
@@ -336,6 +544,33 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Guardrail Alerts */}
+      {guardrailAlerts.length > 0 && (
+        <div className="mb-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs font-medium text-gray-400">Active Alerts</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400">{guardrailAlerts.length}</span>
+            <Link href="/briefing" className="text-[10px] text-brand-400 ml-auto hover:underline">View full briefing</Link>
+          </div>
+          <div className="space-y-2">
+            {guardrailAlerts.slice(0, 2).map((alert) => (
+              <div key={alert.id} className={`flex items-start gap-3 p-3 rounded-xl border ${
+                alert.severity === "danger" ? "border-red-500/30 bg-red-500/5" : "border-amber-500/30 bg-amber-500/5"
+              }`}>
+                <span className="text-base">{alert.icon}</span>
+                <div className="flex-1 min-w-0">
+                  <div className={`text-xs font-medium ${alert.severity === "danger" ? "text-red-400" : "text-amber-400"}`}>{alert.title}</div>
+                  <p className="text-[10px] text-gray-400 mt-0.5">{alert.action}</p>
+                </div>
+              </div>
+            ))}
+            {guardrailAlerts.length > 2 && (
+              <Link href="/briefing" className="text-[10px] text-gray-500 hover:text-brand-400 block text-center">+{guardrailAlerts.length - 2} more alerts</Link>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-4 mb-6">
         <TSSProgressBar actual={actualTSS} planned={plannedTSS} label="Weekly TSS" />
@@ -352,6 +587,7 @@ export default function DashboardPage() {
         <div className="col-span-8 space-y-4">
           {calendarConnected && <WorkWeekSummary calendarData={calendarData} />}
           <VolumeBreakdown activities={activities} planned={planned} />
+          <ActivityAnalysis activities={activities} onAnalyze={handleAnalyzeActivity} analysis={activityAnalysis} />
           <div>
             <h2 className="text-sm font-medium text-gray-400 mb-3">Race Countdowns</h2>
             <div className="grid grid-cols-4 gap-3">
@@ -365,6 +601,7 @@ export default function DashboardPage() {
           <div className="bg-surface-850 border border-white/5 rounded-xl p-4"><div className="text-[10px] text-gray-500 mb-1">Fatigue (ATL)</div><div className="text-2xl font-bold text-white">{Math.round(atl)}</div></div>
           <div className="bg-surface-850 border border-white/5 rounded-xl p-4"><div className="text-[10px] text-gray-500 mb-1">Form (TSB)</div><div className={`text-2xl font-bold ${tsb >= 0 ? "text-emerald-400" : "text-amber-400"}`}>{tsb > 0 ? "+" : ""}{Math.round(tsb)}</div></div>
           <div className="bg-surface-850 border border-white/5 rounded-xl p-4"><div className="text-[10px] text-gray-500 mb-1">Weight</div><div className="text-2xl font-bold text-white">{weight}<span className="text-sm font-normal text-gray-500">kg</span></div><div className="text-[10px] text-gray-500 mt-1">Target: {athlete?.target_weight || 71}kg</div></div>
+          <WeightForecast races={races} currentWeight={weight} targetWeight={athlete?.target_weight || 71} onLoadForecast={loadWeightForecast} forecast={weightForecast} />
         </div>
       </div>
     </div>

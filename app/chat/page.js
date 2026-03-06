@@ -96,7 +96,7 @@ export default function ChatPage() {
       addChatMessage({ role: "assistant", content: data.reply, model: "llama-3.3-70b" });
     } catch (err) {
       console.error("Chat error:", err);
-      const errorMsg = { role: "assistant", content: `Sorry, I couldn't connect to the AI. Error: ${err.message}\n\nMake sure your Gemini API key is set in .env.local and restart the dev server.` };
+      const errorMsg = { role: "assistant", content: `Sorry, I couldn't connect to the AI. Error: ${err.message}\n\nMake sure your GROQ_API_KEY is set in .env.local and restart the dev server.` };
       setMessages([...newMessages, errorMsg]);
     }
 

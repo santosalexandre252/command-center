@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { getAthleteProfile, updateAthleteProfile } from "../../lib/db";
+import { getAthleteProfile, updateAthleteProfile, getRaces } from "../../lib/db";
 import { getIntervalsProfile } from "../../lib/intervals";
 import { getCalendarEvents } from "../../lib/calendar";
 
@@ -33,12 +33,18 @@ export default function SettingsPage() {
   const [intervalsStatus, setIntervalsStatus] = useState("checking");
   const [intervalsFitness, setIntervalsFitness] = useState(null);
   const [calendarStatus, setCalendarStatus] = useState("checking");
+  const [groqStatus, setGroqStatus] = useState("checking");
+  const [races, setRaces] = useState([]);
+  const [gpxUploads, setGpxUploads] = useState({});
 
   useEffect(() => {
     async function load() {
       const data = await getAthleteProfile();
       if (data) { setAthlete(data); setWeight(data.weight); setBodyFat(data.body_fat); setDbStatus("connected"); }
       else setDbStatus("error");
+
+      const racesData = await getRaces();
+      if (racesData) setRaces(racesData);
 
       const ival = await getIntervalsProfile();
       if (ival && ival.ctl !== undefined) { setIntervalsStatus("connected"); setIntervalsFitness(ival); }
@@ -47,6 +53,15 @@ export default function SettingsPage() {
       const calData = await getCalendarEvents();
       if (calData?.events && calData.events.length > 0) setCalendarStatus("connected");
       else setCalendarStatus("error");
+
+      // Check Groq by testing the briefing API
+      try {
+        const briefingRes = await fetch("/api/briefing");
+        if (briefingRes.ok) setGroqStatus("connected");
+        else setGroqStatus("error");
+      } catch {
+        setGroqStatus("error");
+      }
     }
     load();
   }, []);
@@ -57,6 +72,31 @@ export default function SettingsPage() {
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  const handleGPXUpload = async (raceId, file) => {
+    const formData = new FormData();
+    formData.append("gpx", file);
+    formData.append("raceId", raceId);
+
+    try {
+      const res = await fetch("/api/gpx", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (res.ok) {
+        setGpxUploads(prev => ({ ...prev, [raceId]: "uploaded" }));
+        setTimeout(() => {
+          setGpxUploads(prev => ({ ...prev, [raceId]: null }));
+        }, 3000);
+      } else {
+        setGpxUploads(prev => ({ ...prev, [raceId]: "error" }));
+      }
+    } catch (err) {
+      console.error("GPX upload error:", err);
+      setGpxUploads(prev => ({ ...prev, [raceId]: "error" }));
+    }
   };
 
   return (
@@ -73,7 +113,7 @@ export default function SettingsPage() {
           <ConnectionCard name="Apple Watch" icon="⌚" status="pending" description="HR, HRV, sleep, via Intervals.icu" />
           <ConnectionCard name="Smart Scale" icon="⚖️" status="pending" description="Weight, body fat, via Intervals.icu" />
           <ConnectionCard name="Google Calendar" icon="📅" status={calendarStatus === "connected" ? "connected" : "pending"} description={calendarStatus === "connected" ? "Calendar connected — work events syncing" : "Add GOOGLE_CALENDAR_ICAL_URL to .env.local"} />
-          <ConnectionCard name="Gemini API" icon="🤖" status="pending" description="AI — fast analysis, daily recommendations" />
+          <ConnectionCard name="Groq API" icon="🤖" status={groqStatus === "connected" ? "connected" : "pending"} description={groqStatus === "connected" ? "AI — Llama 3.3 70B for coaching & planning" : "Add GROQ_API_KEY to .env.local"} />
         </div>
       </div>
 
@@ -125,12 +165,47 @@ export default function SettingsPage() {
       </div>
 
       <div className="mb-8">
-        <h2 className="text-sm font-medium text-gray-400 mb-3">Race GPX Files</h2>
+        <h2 className="text-sm font-medium text-gray-400 mb-3">Race Course Maps</h2>
         <div className="bg-surface-850 border border-white/5 rounded-xl p-5">
-          <div className="border-2 border-dashed border-gray-700 rounded-lg p-8 text-center">
-            <div className="text-2xl mb-2">📁</div>
-            <p className="text-sm text-gray-400">Drag & drop GPX files here</p>
-            <p className="text-[10px] text-gray-600 mt-1">For race course maps and elevation profiles</p>
+          <p className="text-sm text-gray-500 mb-4">Upload GPX files for interactive course maps and elevation profiles</p>
+          <div className="space-y-3">
+            {races.map((race) => (
+              <div key={race.id} className="flex items-center justify-between p-3 bg-surface-900 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <span className="text-lg">{race.type === "road_run" ? "🏃" : race.type === "trail" ? "⛰️" : "🚴"}</span>
+                  <div>
+                    <div className="text-sm font-medium text-gray-200">{race.name}</div>
+                    <div className="text-xs text-gray-500">{race.distance}km • {race.date}</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {gpxUploads[race.id] === "uploaded" && <span className="text-emerald-400 text-xs">✓ Uploaded</span>}
+                  {gpxUploads[race.id] === "error" && <span className="text-red-400 text-xs">✗ Error</span>}
+                  <label className="cursor-pointer px-3 py-1.5 bg-surface-800 text-gray-400 text-xs rounded-lg border border-white/5 hover:text-white hover:border-brand-500/30 transition-colors">
+                    Upload GPX
+                    <input
+                      type="file"
+                      accept=".gpx"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files[0];
+                        if (file) handleGPXUpload(race.id, file);
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 p-3 bg-surface-900 rounded-lg">
+            <div className="text-xs text-gray-500">
+              <div className="font-medium text-gray-400 mb-1">GPX File Tips:</div>
+              <ul className="list-disc list-inside space-y-0.5">
+                <li>Download from Strava, Garmin Connect, or race website</li>
+                <li>Files should contain track points with elevation data</li>
+                <li>Course maps will appear on individual race pages</li>
+              </ul>
+            </div>
           </div>
         </div>
       </div>
