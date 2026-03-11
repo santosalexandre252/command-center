@@ -1,41 +1,11 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, ReferenceLine } from "recharts";
-
-// Dynamic imports for Leaflet components to handle missing dependencies gracefully
-let MapContainer, TileLayer, Polyline, Marker, Popup, L;
-try {
-  const leaflet = require("leaflet");
-  const reactLeaflet = require("react-leaflet");
-  MapContainer = reactLeaflet.MapContainer;
-  TileLayer = reactLeaflet.TileLayer;
-  Polyline = reactLeaflet.Polyline;
-  Marker = reactLeaflet.Marker;
-  Popup = reactLeaflet.Popup;
-  L = leaflet;
-
-  // Fix for default markers in react-leaflet
-  delete L.Icon.Default.prototype._getIconUrl;
-  L.Icon.Default.mergeOptions({
-    iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
-    iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
-    shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
-  });
-
-  // Import CSS
-  if (typeof window !== 'undefined') {
-    require("leaflet/dist/leaflet.css");
-  }
-} catch (e) {
-  // Leaflet not available
-  console.warn("Leaflet dependencies not installed. GPX map functionality will be limited.");
-}
 
 function parseGPX(gpxText) {
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(gpxText, "text/xml");
   const trackPoints = xmlDoc.getElementsByTagName("trkpt");
-
   const points = [];
   const elevationData = [];
 
@@ -48,67 +18,43 @@ function parseGPX(gpxText) {
 
     if (lat && lon) {
       points.push([lat, lon]);
-
       if (ele) {
         elevationData.push({
-          distance: i * 0.01, // Rough distance calculation (km)
+          distance: i * 0.01,
           elevation: parseFloat(ele),
           time: time ? new Date(time).getTime() : i,
         });
       }
     }
   }
-
   return { points, elevationData };
 }
 
 function calculatePacingZones(elevationData, athlete) {
   if (!elevationData.length || !athlete) return [];
-
   const ftp = athlete.ftp || 181;
-  const thresholdPace = athlete.threshold_pace || 310; // seconds per km
+  const thresholdPace = athlete.threshold_pace || 310;
 
   return elevationData.map((point, index) => {
-    // Calculate gradient
     const prevPoint = elevationData[Math.max(0, index - 10)];
     const nextPoint = elevationData[Math.min(elevationData.length - 1, index + 10)];
     const distance = (nextPoint.distance - prevPoint.distance) || 0.1;
     const elevationChange = nextPoint.elevation - prevPoint.elevation;
-    const gradient = (elevationChange / (distance * 1000)) * 100; // percentage
+    const gradient = (elevationChange / (distance * 1000)) * 100;
 
-    // Adjust pace based on gradient
     let adjustedPace = thresholdPace;
-    if (gradient > 0) {
-      // Uphill - slower pace
-      adjustedPace = thresholdPace * (1 + gradient / 50);
-    } else if (gradient < 0) {
-      // Downhill - faster pace
-      adjustedPace = thresholdPace * (1 + gradient / 100);
-    }
+    if (gradient > 0) adjustedPace = thresholdPace * (1 + gradient / 50);
+    else if (gradient < 0) adjustedPace = thresholdPace * (1 + gradient / 100);
 
-    // Convert to pace zones
     const pacePerKm = adjustedPace;
     let zone = "threshold";
-    let zoneColor = "#fbbf24"; // yellow
+    let zoneColor = "#fbbf24";
 
-    if (pacePerKm < thresholdPace * 0.9) {
-      zone = "fast";
-      zoneColor = "#ef4444"; // red
-    } else if (pacePerKm < thresholdPace * 0.95) {
-      zone = "tempo";
-      zoneColor = "#f97316"; // orange
-    } else if (pacePerKm > thresholdPace * 1.1) {
-      zone = "easy";
-      zoneColor = "#22c55e"; // green
-    }
+    if (pacePerKm < thresholdPace * 0.9) { zone = "fast"; zoneColor = "#ef4444"; }
+    else if (pacePerKm < thresholdPace * 0.95) { zone = "tempo"; zoneColor = "#f97316"; }
+    else if (pacePerKm > thresholdPace * 1.1) { zone = "easy"; zoneColor = "#22c55e"; }
 
-    return {
-      ...point,
-      gradient,
-      adjustedPace: pacePerKm,
-      zone,
-      zoneColor,
-    };
+    return { ...point, gradient, adjustedPace: pacePerKm, zone, zoneColor };
   });
 }
 
@@ -116,52 +62,26 @@ export default function GPXMap({ raceId, athlete }) {
   const [gpxData, setGpxData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [aidStations, setAidStations] = useState([]);
 
+  // 💡 NEW: Direct DOM references instead of react-leaflet wrappers
+  const mapContainerRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+
+  // 1. Fetch the Data
   useEffect(() => {
     async function loadGPX() {
       try {
         const res = await fetch(`/api/gpx?raceId=${raceId}`);
+        if (!res.ok) throw new Error("Failed to fetch GPX metadata");
         
-        // Check if response is ok
-        if (!res.ok) {
-          console.error(`GPX API error: ${res.status} ${res.statusText}`);
-          setError("Failed to load GPX data");
-          setLoading(false);
-          return;
-        }
-
-        // Check if we can parse as JSON
-        const contentType = res.headers.get("content-type");
-        if (!contentType || !contentType.includes("application/json")) {
-          console.error("Invalid response content type:", contentType);
-          setError("Invalid API response");
-          setLoading(false);
-          return;
-        }
-
         const data = await res.json();
-
-        // Check for Supabase configuration error
-        if (res.status === 503) {
-          console.warn("GPX feature not configured:", data.error);
-          setLoading(false); // Just show empty state
-          return;
-        }
-
-        if (!data.exists) {
+        if (res.status === 503 || !data.exists) {
           setLoading(false);
           return;
         }
 
-        // Fetch and parse GPX
         const gpxRes = await fetch(data.publicUrl);
-        if (!gpxRes.ok) {
-          console.error(`GPX file fetch error: ${gpxRes.status}`);
-          setError("Failed to fetch GPX file");
-          setLoading(false);
-          return;
-        }
+        if (!gpxRes.ok) throw new Error("Failed to download GPX file");
 
         const gpxText = await gpxRes.text();
         const parsed = parseGPX(gpxText);
@@ -169,128 +89,103 @@ export default function GPXMap({ raceId, athlete }) {
         if (parsed.points.length > 0) {
           setGpxData(parsed);
         }
-        setLoading(false);
       } catch (err) {
         console.error("GPX load error:", err);
-        setError("Failed to load GPX data");
+        setError(err.message);
+      } finally {
         setLoading(false);
       }
     }
-
-    if (raceId) {
-      loadGPX();
-    }
+    if (raceId) loadGPX();
   }, [raceId]);
 
-  if (loading) {
-    return (
-      <div className="bg-surface-850 border border-white/5 rounded-xl p-6 h-96 flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-gray-500 text-sm mb-2">Loading course map...</div>
-          <div className="flex justify-center gap-1">
-            <div className="w-2 h-2 bg-brand-400 rounded-full animate-bounce"></div>
-            <div className="w-2 h-2 bg-brand-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }}></div>
-            <div className="w-2 h-2 bg-brand-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }}></div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // 2. Render the Map with Vanilla Leaflet
+  useEffect(() => {
+    // Only run when we have data and the container is ready
+    if (!gpxData || !mapContainerRef.current) return;
 
-  if (error || !gpxData) {
-    return (
-      <div className="bg-surface-850 border border-white/5 rounded-xl p-6 h-96 flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-gray-500 text-sm mb-2">
-            {error || "No course map available"}
-          </div>
-          <div className="text-gray-600 text-xs">
-            Upload a GPX file in Settings to view the interactive course map
-          </div>
-        </div>
-      </div>
-    );
-  }
+    let isMounted = true;
 
-  // Check for loading state
-  if (loading) {
-    return (
-      <div className="bg-surface-850 border border-white/5 rounded-xl p-6 h-96 flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-gray-500 text-sm">Loading course map...</div>
-        </div>
-      </div>
-    );
-  }
+    import("leaflet").then((L) => {
+      if (!isMounted) return;
 
-  // Check for error state
-  if (error || !gpxData) {
-    return (
-      <div className="bg-surface-850 border border-white/5 rounded-xl p-6 h-96 flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-amber-500 text-sm mb-2">⚠️ {error || "No GPX data available"}</div>
-          <div className="text-gray-600 text-xs">
-            {error === "Failed to load GPX data" ? "Could not load the course map data. Please try again." : "No course map has been uploaded for this race yet."}
-          </div>
-        </div>
-      </div>
-    );
-  }
+      import("leaflet/dist/leaflet.css");
+      
+      delete L.Icon.Default.prototype._getIconUrl;
+      L.Icon.Default.mergeOptions({
+        iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
+        iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
+        shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+      });
 
-  // Check if leaflet is available
-  if (!MapContainer || !L) {
-    return (
-      <div className="bg-surface-850 border border-white/5 rounded-xl p-6 h-96 flex items-center justify-center">
+      const container = mapContainerRef.current;
+
+      // 💡 THE ULTIMATE HMR FIX:
+      // A. Gracefully remove the old map instance if it exists
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+
+      // B. Brutally scrub the DOM node of any leftover Leaflet internal IDs
+      if (container) {
+        container._leaflet_id = null;
+        container.innerHTML = '';
+      }
+
+      // Initialize the pure Leaflet map directly onto the div
+      const map = L.map(container, {
+        scrollWheelZoom: false,
+      });
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: '&copy; OpenStreetMap'
+      }).addTo(map);
+
+      L.polyline(gpxData.points, {
+        color: "#3b82f6",
+        weight: 3,
+        opacity: 0.8
+      }).addTo(map);
+
+      map.fitBounds(L.latLngBounds(gpxData.points));
+      mapInstanceRef.current = map;
+
+    }).catch(err => console.error("Error loading Leaflet:", err));
+
+    // Cleanup function runs on unmount or hot-reload
+    return () => {
+      isMounted = false;
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+    };
+  }, [gpxData]);
+
+  if (loading) return (
+    <div className="bg-surface-850 border border-white/5 rounded-xl p-6 h-96 flex items-center justify-center text-gray-500 text-sm">
+      Loading course map...
+    </div>
+  );
+
+  if (error || !gpxData) return (
+    <div className="bg-surface-850 border border-white/5 rounded-xl p-6 h-96 flex items-center justify-center">
         <div className="text-center">
-          <div className="text-gray-500 text-sm mb-2">Interactive Map Unavailable</div>
-          <div className="text-gray-600 text-xs mb-4">
-            Leaflet mapping library not installed. Install dependencies to view course maps.
-          </div>
-          <div className="text-xs text-gray-500">
-            Run: <code className="bg-surface-900 px-2 py-1 rounded">pnpm install leaflet react-leaflet leaflet-gpx</code>
-          </div>
+          <div className="text-gray-500 text-sm mb-2">{error || "No course map available"}</div>
+          <div className="text-gray-600 text-xs">Upload a GPX file in Settings to view the interactive course map</div>
         </div>
-      </div>
-    );
-  }
+    </div>
+  );
 
   const pacingData = calculatePacingZones(gpxData.elevationData, athlete);
-  const bounds = L.latLngBounds(gpxData.points);
 
   return (
     <div className="space-y-4">
       {/* Map */}
-      <div className="bg-surface-850 border border-white/5 rounded-xl overflow-hidden">
-        <div className="h-64">
-          <MapContainer
-            bounds={bounds}
-            scrollWheelZoom={false}
-            style={{ height: "100%", width: "100%" }}
-            className="leaflet-container"
-          >
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
-            <Polyline
-              positions={gpxData.points}
-              color="#3b82f6"
-              weight={3}
-              opacity={0.8}
-            />
-            {/* Aid stations would be added here */}
-            {aidStations.map((station, i) => (
-              <Marker key={i} position={[station.lat, station.lng]}>
-                <Popup>
-                  <div className="text-xs">
-                    <div className="font-medium">{station.name}</div>
-                    <div className="text-gray-600">Aid Station {i + 1}</div>
-                  </div>
-                </Popup>
-              </Marker>
-            ))}
-          </MapContainer>
-        </div>
+      <div className="bg-surface-850 border border-white/5 rounded-xl overflow-hidden relative z-0">
+        {/* We attach the ref directly to the empty div */}
+        <div ref={mapContainerRef} className="h-64 w-full"></div>
       </div>
 
       {/* Elevation Profile */}
@@ -298,59 +193,24 @@ export default function GPXMap({ raceId, athlete }) {
         <h4 className="text-sm font-medium text-gray-300 mb-3">Elevation Profile & Pacing Zones</h4>
         <ResponsiveContainer width="100%" height={150}>
           <LineChart data={pacingData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
-            <XAxis
-              dataKey="distance"
-              tick={{ fill: "#6b7280", fontSize: 9 }}
-              tickLine={false}
-              label={{ value: "Distance (km)", position: "insideBottom", offset: -5, style: { textAnchor: "middle", fill: "#6b7280", fontSize: 10 } }}
-            />
-            <YAxis
-              tick={{ fill: "#6b7280", fontSize: 9 }}
-              tickLine={false}
-              label={{ value: "Elevation (m)", angle: -90, position: "insideLeft", style: { textAnchor: "middle", fill: "#6b7280", fontSize: 10 } }}
-            />
+            <XAxis dataKey="distance" tick={{ fill: "#6b7280", fontSize: 9 }} tickLine={false} />
+            <YAxis tick={{ fill: "#6b7280", fontSize: 9 }} tickLine={false} />
             <Tooltip
-              content={({ active, payload, label }) => {
+              content={({ active, payload }) => {
                 if (!active || !payload?.length) return null;
                 const data = payload[0].payload;
                 return (
                   <div className="bg-surface-900 border border-white/10 rounded-lg px-3 py-2 text-xs shadow-lg">
-                    <div className="text-gray-400 mb-1">{label.toFixed(1)}km</div>
                     <div className="text-white">{data.elevation.toFixed(0)}m elevation</div>
                     <div style={{ color: data.zoneColor }}>{data.zone} pace zone</div>
-                    <div className="text-gray-400">{data.gradient.toFixed(1)}% gradient</div>
                   </div>
                 );
               }}
             />
-            <Line
-              type="monotone"
-              dataKey="elevation"
-              stroke="#6b7280"
-              strokeWidth={2}
-              dot={false}
-            />
+            <Line type="monotone" dataKey="elevation" stroke="#6b7280" strokeWidth={2} dot={false} />
             <ReferenceLine y={0} stroke="#374151" strokeDasharray="2 2" />
           </LineChart>
         </ResponsiveContainer>
-        <div className="flex gap-4 mt-3 text-xs">
-          <div className="flex items-center gap-1">
-            <div className="w-3 h-1 bg-green-500 rounded"></div>
-            <span className="text-gray-400">Easy</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <div className="w-3 h-1 bg-yellow-500 rounded"></div>
-            <span className="text-gray-400">Threshold</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <div className="w-3 h-1 bg-orange-500 rounded"></div>
-            <span className="text-gray-400">Tempo</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <div className="w-3 h-1 bg-red-500 rounded"></div>
-            <span className="text-gray-400">Fast</span>
-          </div>
-        </div>
       </div>
     </div>
   );

@@ -60,12 +60,12 @@ function RunningPowerChart({ activities }) {
   const powerData = useMemo(() => {
     return activities
       .filter(a => (a.type === "Run" || a.type === "VirtualRun") && a.icu_weighted_avg_watts)
-      .sort((a, b) => new Date(a.start_date_local) - new Date(b.start_date_local))
+      .sort((a, b) => new Date(a.start_date_local || a.start_date || a.date) - new Date(b.start_date_local || b.start_date || b.date))
       .map(activity => ({
-        date: new Date(activity.start_date_local).toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
+        date: new Date(activity.start_date_local || activity.start_date || activity.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
         power: Math.round(activity.icu_weighted_avg_watts),
         distance: activity.distance ? Math.round(activity.distance / 1000 * 10) / 10 : 0,
-        fullDate: activity.start_date_local
+        fullDate: activity.start_date_local || activity.start_date || activity.date
       }));
   }, [activities]);
 
@@ -114,7 +114,7 @@ function EfficiencyScatter({ activities }) {
           efficiency: Math.round(efficiency * 100) / 100,
           hr,
           power,
-          date: new Date(activity.start_date_local).toLocaleDateString("en-GB", { month: "short", day: "numeric" }),
+          date: new Date(activity.start_date_local || activity.start_date || activity.date).toLocaleDateString("en-GB", { month: "short", day: "numeric" }),
         };
       })
       .filter(d => d.efficiency > 0);
@@ -189,9 +189,8 @@ export default function RunningPage() {
 
     const runningActivities = activities.filter(a =>
       (a.type === "Run" || a.type === "VirtualRun") &&
-      a.distance &&
       a.moving_time &&
-      a.distance > 1000 // At least 1km
+      (a.distance || 0) > 1000 // Fallback to 0 if distance is missing
     );
 
     const pbs = {};
@@ -208,7 +207,7 @@ export default function RunningPage() {
 
     distances.forEach(({ key, min, max }) => {
       const candidates = runningActivities.filter(a =>
-        a.distance >= min && a.distance <= max
+        (a.distance || 0) >= min && (a.distance || 0) <= max
       );
 
       if (candidates.length > 0) {
@@ -216,15 +215,17 @@ export default function RunningPage() {
           current.moving_time < best.moving_time ? current : best
         );
 
-        const pace = (best.moving_time / 60) / (best.distance / 1000); // min/km
+        const safeDistance = best.distance || 1; // Prevent division by zero
+        const pace = (best.moving_time / 60) / (safeDistance / 1000); // min/km
         const paceMin = Math.floor(pace);
         const paceSec = Math.round((pace - paceMin) * 60);
+        const bestDateStr = best.start_date_local || best.start_date || best.date || new Date().toISOString();
 
         pbs[key] = {
           time: new Date(best.moving_time * 1000).toISOString().substr(11, 8),
           pace: `${paceMin}:${paceSec.toString().padStart(2, '0')}`,
-          date: new Date(best.start_date_local).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" }),
-          distance: Math.round(best.distance / 10) / 100,
+          date: new Date(bestDateStr).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" }),
+          distance: Math.round(safeDistance / 10) / 100,
         };
       }
     });
@@ -237,18 +238,20 @@ export default function RunningPage() {
 
     const runningActivities = activities.filter(a =>
       (a.type === "Run" || a.type === "VirtualRun") &&
-      a.distance &&
       a.moving_time
     );
 
-    // Group by month and find best times for common distances
     const monthlyBests = {};
 
     runningActivities.forEach(activity => {
-      const month = activity.start_date_local.substring(0, 7);
-      const distance = Math.round(activity.distance / 1000 * 10) / 10; // Round to 0.1km
+      const dateStr = activity.start_date_local || activity.start_date || activity.date;
+      if (!dateStr) return; 
+
+      const month = dateStr.substring(0, 7);
+      const distance = Math.round((activity.distance || 0) / 1000 * 10) / 10; 
 
       if (!monthlyBests[month]) monthlyBests[month] = {};
+      
       if (!monthlyBests[month][distance] || activity.moving_time < monthlyBests[month][distance]) {
         monthlyBests[month][distance] = activity.moving_time;
       }
@@ -261,8 +264,7 @@ export default function RunningPage() {
           month: new Date(month + "-01").toLocaleDateString("en-GB", { month: "short", year: "2-digit" }),
         };
 
-        // Find best times for standard distances
-        if (distances[5]) monthData["5k"] = Math.round((distances[5] / 60) * 10) / 10; // minutes
+        if (distances[5]) monthData["5k"] = Math.round((distances[5] / 60) * 10) / 10; 
         if (distances[10]) monthData["10k"] = Math.round((distances[10] / 60) * 10) / 10;
 
         return monthData;
